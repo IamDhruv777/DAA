@@ -209,6 +209,54 @@ async def reset_simulation(config: SimStartConfig = None):
         simulation.initialize()
     return {"status": "reset"}
 
+@app.post("/api/simulation/road-closure")
+async def trigger_road_closure():
+    """Trigger a random road closure and dynamically reroute active drivers."""
+    if not simulation.is_running:
+        return {"status": "error", "message": "Simulation is not running."}
+    
+    closures = simulation.trigger_road_closure(num_closures=5)
+    return {
+        "status": "success", 
+        "closures_count": len(closures),
+        "message": f"Closed {len(closures)} roads. Active drivers re-routing."
+    }
+
+@app.post("/api/simulation/inject-order")
+async def inject_order(data: dict):
+    """Dynamically inject a new high-priority order mid-simulation."""
+    if not simulation.is_running:
+        return {"status": "error", "message": "Simulation is not running."}
+        
+    order_id = f"VIP-{int(time.time())}"
+    # Use real nodes if provided, else default to some known random nodes
+    # Assuming Pune graph: we just pick two random nodes
+    import random
+    nodes = list(simulation.graph.nodes())
+    p_node = random.choice(nodes)
+    d_node = random.choice(nodes)
+    
+    from road_network import get_node_coords
+    p_coords = get_node_coords(simulation.graph, p_node)
+    d_coords = get_node_coords(simulation.graph, d_node)
+    
+    new_order = {
+        "order_id": order_id,
+        "restaurant_node": p_node,
+        "restaurant_lat": p_coords[0],
+        "restaurant_lng": p_coords[1],
+        "customer_node": d_node,
+        "customer_lat": d_coords[0],
+        "customer_lng": d_coords[1],
+        "status": "pending",
+        "is_priority": True
+    }
+    
+    simulation.orders.insert(simulation.orders_released, new_order)
+    simulation.orders_released += 1
+    
+    return {"status": "success", "order_id": order_id, "message": "VIP Order injected."}
+
 
 @app.post("/api/simulation/config")
 async def update_config(data: dict):

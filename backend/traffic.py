@@ -104,3 +104,26 @@ def update_traffic_for_time(G, hour_of_day):
         data["traffic_multiplier"] = multiplier
         base_time = data.get("base_travel_time", 12)
         data["travel_time"] = base_time * multiplier
+
+def simulate_road_closures(G, num_closures=3):
+    """
+    Randomly blocks a specified number of edges to simulate road closures,
+    forcing active drivers to dynamically re-route.
+    """
+    edges = list(G.edges(data=True))
+    if not edges:
+        return []
+        
+    closed_edges = []
+    # Optionally clear old closures if we wanted, but we'll just add new ones for now
+    
+    # Pick random edges to close
+    closures = random.sample(edges, min(num_closures, len(edges)))
+    
+    for u, v, data in closures:
+        data["traffic_level"] = "closed"
+        data["traffic_multiplier"] = 1000.0  # Huge penalty
+        data["travel_time"] = 1000000.0      # Effectively infinite
+        closed_edges.append((u, v))
+        
+    return closed_edges

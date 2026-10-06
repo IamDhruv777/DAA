@@ -234,6 +234,45 @@ class SimulationEngine:
                 driver["lng"] = new_pos[1]
                 driver["stats"]["total_distance_m"] += accumulated_dist
 
+    def trigger_road_closure(self, num_closures=3):
+        """Simulates unexpected road closures and forces active drivers to re-route."""
+        from traffic import simulate_road_closures
+        closures = simulate_road_closures(self.graph, num_closures)
+        
+        # Log the incident in metrics or print
+        print(f"[Simulation] Dynamic Event: {len(closures)} roads closed! Re-routing active drivers...")
+        
+        self.recalculate_active_routes()
+        return closures
+
+    def recalculate_active_routes(self):
+        """Dynamically re-routes all currently moving drivers from their immediate positions."""
+        from route_optimizer import optimize_driver_route
+        from road_network import get_nearest_node
+        
+        for driver in self.drivers:
+            if driver["status"] in ("picking", "delivering") and driver["current_orders"]:
+                # Update driver's logical node to their physical coordinates so pathing starts correctly
+                current_node = get_nearest_node(self.graph, driver["lat"], driver["lng"])
+                driver["current_node"] = current_node
+                
+                # Fetch pending orders for this driver
+                driver_orders = [o for o in self.orders[:self.orders_released] if o["order_id"] in driver["current_orders"]]
+                
+                # We skip deliveries already made by filtering orders that are fully completed, 
+                # but our basic loop assumes if it's in current_orders it's not delivered yet.
+                route_coords, stops, total_dist = optimize_driver_route(
+                    self.graph, driver, driver_orders,
+                    routing_mode=self.routing_mode,
+                    manual_algorithm=self.manual_algorithm,
+                    traffic_level=1.5, # Assume incident causes general traffic spike
+                    sequencing_strategy=self.sequencing_strategy
+                )
+                
+                # Apply new dynamically calculated route
+                driver["route_coords"] = route_coords
+                driver["route_progress"] = 0
+
     def _complete_delivery(self, driver):
         """Mark a driver's delivery as complete."""
         # Mark orders as delivered
