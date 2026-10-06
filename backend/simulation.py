@@ -45,6 +45,12 @@ class SimulationEngine:
         self.batching_strategy = KMeansBatching()
         self.assignment_strategy = GreedyNearestAssignment()
         self.sequencing_strategy = GreedySequencing()
+        
+        # Optimizer
+        from algorithms.optimization.ortools_cvrptw import ORToolsCVRPTW, ORTOOLS_AVAILABLE
+        self.cvrptw_optimizer = ORToolsCVRPTW(time_limit_sec=1, max_capacity=3) if ORTOOLS_AVAILABLE else None
+        self.use_cvrptw = False  # Toggleable via UI / API
+
         self.tick_delay = 2.0  # Default 2 seconds
         
         # New Routing Configuration
@@ -82,6 +88,40 @@ class SimulationEngine:
         released = end - start
         self.orders_released = end
         return released
+
+    def _run_cvrptw(self):
+        """Global optimization for batching, assignment, and sequencing."""
+        assignments = self.cvrptw_optimizer.optimize(self.drivers, self.orders[:self.orders_released])
+        
+        # Apply assignments
+        for driver_id, route_seq in assignments.items():
+            driver = next(d for d in self.drivers if d["driver_id"] == driver_id)
+            
+            # Map sequence to actual route coords
+            order_ids = [order_id for _, order_id in route_seq if order_id not in driver["current_orders"]]
+            driver["current_orders"].extend(order_ids)
+            driver["status"] = "picking"
+            
+            driver_orders = [o for o in self.orders[:self.orders_released] if o["order_id"] in driver["current_orders"]]
+            
+            # Use GreedyTSP for pathing given the CVRPTW stop sequence
+            # (In a full implementation we'd trace exactly the OR-Tools sequence)
+            from route_optimizer import optimize_driver_route
+            route_coords, stops, total_dist = optimize_driver_route(
+                self.graph, driver, driver_orders,
+                routing_mode=self.routing_mode,
+                manual_algorithm=self.manual_algorithm
+            )
+            driver["route_coords"] = route_coords
+            driver["route_progress"] = 0
+            
+            # Mark orders
+            for order_id in order_ids:
+                for order in self.orders[:self.orders_released]:
+                    if order["order_id"] == order_id:
+                        order["status"] = "assigned"
+                        order["assigned_driver"] = driver_id
+                        break
 
     def _run_batching(self):
         """Batch pending orders."""
@@ -250,14 +290,15 @@ class SimulationEngine:
         if self.tick_count % 5 == 0:
             update_traffic(self.graph)
 
-        # 3. Batch pending orders
-        self._run_batching()
-
-        # 4. Assign drivers
-        self._assign_drivers()
-
-        # 5. Compute routes for new assignments
-        self._compute_routes()
+        if self.use_cvrptw and self.cvrptw_optimizer:
+            self._run_cvrptw()
+        else:
+            # 3. Batch pending orders
+            self._run_batching()
+            # 4. Assign drivers
+            self._assign_drivers()
+            # 5. Compute routes for new assignments
+            self._compute_routes()
 
         # 6. Move drivers
         self._move_drivers()

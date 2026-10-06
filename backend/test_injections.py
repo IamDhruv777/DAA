@@ -65,4 +65,27 @@ print(f"FoodMatch Batches (Found {len(batches_fm)}):")
 for b in batches_fm:
     print(b["orders"])
 
+print("\n--- Testing Optimization Algorithms (CVRPTW) ---")
+from algorithms.optimization.ortools_cvrptw import ORToolsCVRPTW, ORTOOLS_AVAILABLE
+
+if ORTOOLS_AVAILABLE:
+    cvrptw = ORToolsCVRPTW(time_limit_sec=1, max_capacity=2)
+    # Give it 2 idle drivers and 3 pending orders
+    d_list = [
+        {"driver_id": "D1", "lat": 18.5, "lng": 73.8, "status": "idle"},
+        {"driver_id": "D2", "lat": 18.6, "lng": 73.9, "status": "idle"}
+    ]
+    o_list = [
+        {"order_id": "O1", "status": "pending", "restaurant_lat": 18.51, "restaurant_lng": 73.81, "customer_lat": 18.52, "customer_lng": 73.82},
+        {"order_id": "O2", "status": "pending", "restaurant_lat": 18.515, "restaurant_lng": 73.815, "customer_lat": 18.525, "customer_lng": 73.825},
+        {"order_id": "O3", "status": "pending", "restaurant_lat": 18.61, "restaurant_lng": 73.91, "customer_lat": 18.62, "customer_lng": 73.92}
+    ]
+    
+    result = cvrptw.optimize(d_list, o_list)
+    print("CVRPTW Assignment & Routes:")
+    for d_id, route in result.items():
+        print(f"  {d_id}: {route}")
+else:
+    print("OR-Tools not available, skipping CVRPTW test.")
+
 print("\nALL INJECTIONS VERIFIED")
