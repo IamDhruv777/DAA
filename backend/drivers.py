@@ -6,6 +6,7 @@ import random
 import heapq
 import math
 from road_network import PUNE_BOUNDS, get_nearest_node
+from algorithms.interfaces import AssignmentAlgorithm
 
 
 def haversine_distance(lat1, lng1, lat2, lng2):
@@ -21,11 +22,6 @@ def haversine_distance(lat1, lng1, lat2, lng2):
 def initialize_drivers(G, num_drivers=50):
     """
     Create driver objects at random locations in Pune.
-
-    Each driver has:
-    - id, lat, lng, status, current_node
-    - active_batch, route, route_progress
-    - stats (deliveries_completed, total_distance, total_time)
     """
     drivers = []
     for i in range(num_drivers):
@@ -54,73 +50,81 @@ def initialize_drivers(G, num_drivers=50):
     return drivers
 
 
-def assign_drivers_to_batches(drivers, batches, orders):
-    """
-    Assign idle drivers to batches using nearest-driver heuristic.
-    Uses a priority queue sorted by distance.
+class GreedyNearestAssignment(AssignmentAlgorithm):
+    """Strategy class for Greedy Nearest-Driver Assignment"""
 
-    Returns list of (driver_index, batch_index) assignments.
-    """
-    idle_drivers = [(i, d) for i, d in enumerate(drivers) if d["status"] == "idle"]
+    def assign(self, drivers, batches, orders):
+        """
+        Assign idle drivers to batches using nearest-driver heuristic.
+        Uses a priority queue sorted by distance.
+        Returns list of (driver_index, batch_index) assignments.
+        """
+        idle_drivers = [(i, d) for i, d in enumerate(drivers) if d["status"] == "idle"]
 
-    if not idle_drivers or not batches:
-        return []
+        if not idle_drivers or not batches:
+            return []
 
-    assignments = []
-    assigned_batches = set()
-    assigned_drivers = set()
+        assignments = []
+        assigned_batches = set()
+        assigned_drivers = set()
 
-    # Build priority queue: (distance, driver_idx, batch_idx)
-    heap = []
-    for di, (driver_idx, driver) in enumerate(idle_drivers):
-        for bi, batch in enumerate(batches):
-            if batch.get("assigned", False):
-                continue
-            dist = haversine_distance(
-                driver["lat"], driver["lng"],
-                batch["centroid_lat"], batch["centroid_lng"]
-            )
-            
-            # Smart scoring
-            score = dist
-            # High priority batch: artificially lower the distance cost to attract drivers
-            if batch.get("is_priority", False):
-                score -= 3.0  # equivalent to 3km advantage
+        # Build priority queue: (distance, driver_idx, batch_idx)
+        heap = []
+        for di, (driver_idx, driver) in enumerate(idle_drivers):
+            for bi, batch in enumerate(batches):
+                if batch.get("assigned", False):
+                    continue
+                dist = haversine_distance(
+                    driver["lat"], driver["lng"],
+                    batch["centroid_lat"], batch["centroid_lng"]
+                )
                 
-            # Load balancing: slight penalty for drivers with many deliveries
-            score += driver["stats"]["deliveries_completed"] * 0.1
-            
-            heapq.heappush(heap, (score, driver_idx, bi))
+                # Smart scoring
+                score = dist
+                # High priority batch: artificially lower the distance cost to attract drivers
+                if batch.get("is_priority", False):
+                    score -= 3.0  # equivalent to 3km advantage
+                    
+                # Load balancing: slight penalty for drivers with many deliveries
+                score += driver["stats"]["deliveries_completed"] * 0.1
+                
+                heapq.heappush(heap, (score, driver_idx, bi))
 
-    # Greedy assignment: pick closest pairs
-    while heap and len(assignments) < len(idle_drivers) and len(assignments) < len(batches):
-        dist, driver_idx, batch_idx = heapq.heappop(heap)
+        # Greedy assignment: pick closest pairs
+        while heap and len(assignments) < len(idle_drivers) and len(assignments) < len(batches):
+            dist, driver_idx, batch_idx = heapq.heappop(heap)
 
-        if driver_idx in assigned_drivers or batch_idx in assigned_batches:
-            continue
+            if driver_idx in assigned_drivers or batch_idx in assigned_batches:
+                continue
 
-        assignments.append((driver_idx, batch_idx))
-        assigned_drivers.add(driver_idx)
-        assigned_batches.add(batch_idx)
+            assignments.append((driver_idx, batch_idx))
+            assigned_drivers.add(driver_idx)
+            assigned_batches.add(batch_idx)
 
-        # Update driver status
-        drivers[driver_idx]["status"] = "picking"
-        drivers[driver_idx]["active_batch"] = batches[batch_idx]["batch_id"]
-        drivers[driver_idx]["current_orders"] = batches[batch_idx]["orders"]
+            # Update driver status
+            drivers[driver_idx]["status"] = "picking"
+            drivers[driver_idx]["active_batch"] = batches[batch_idx]["batch_id"]
+            drivers[driver_idx]["current_orders"] = batches[batch_idx]["orders"]
 
-        # Update order statuses
-        for order_id in batches[batch_idx]["orders"]:
-            for order in orders:
-                if order["order_id"] == order_id:
-                    order["status"] = "assigned"
-                    order["assigned_driver"] = drivers[driver_idx]["driver_id"]
-                    order["batch_id"] = batches[batch_idx]["batch_id"]
-                    break
+            # Update order statuses
+            for order_id in batches[batch_idx]["orders"]:
+                for order in orders:
+                    if order["order_id"] == order_id:
+                        order["status"] = "assigned"
+                        order["assigned_driver"] = drivers[driver_idx]["driver_id"]
+                        order["batch_id"] = batches[batch_idx]["batch_id"]
+                        break
 
-        batches[batch_idx]["assigned"] = True
-        batches[batch_idx]["assigned_driver"] = drivers[driver_idx]["driver_id"]
+            batches[batch_idx]["assigned"] = True
+            batches[batch_idx]["assigned_driver"] = drivers[driver_idx]["driver_id"]
 
-    return assignments
+        return assignments
+
+
+def assign_drivers_to_batches(drivers, batches, orders):
+    """Backward compatibility wrapper"""
+    strategy = GreedyNearestAssignment()
+    return strategy.assign(drivers, batches, orders)
 
 
 def get_driver_stats(drivers):

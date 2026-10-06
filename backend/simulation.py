@@ -11,9 +11,9 @@ from datetime import datetime
 from road_network import load_graph, get_node_coords
 from traffic import update_traffic, get_traffic_summary
 from orders import generate_orders, get_order_stats
-from batching import batch_orders
-from drivers import initialize_drivers, assign_drivers_to_batches, get_driver_stats
-from route_optimizer import optimize_driver_route
+from batching import batch_orders, KMeansBatching
+from drivers import initialize_drivers, assign_drivers_to_batches, get_driver_stats, GreedyNearestAssignment
+from route_optimizer import optimize_driver_route, GreedySequencing
 
 
 class SimulationEngine:
@@ -40,6 +40,11 @@ class SimulationEngine:
         self._delivery_times = []
         self._ws_clients = set()
         self._orders_per_tick = 10  # Release 10 orders per tick
+        
+        # Instantiate Modular Strategy Algorithms
+        self.batching_strategy = KMeansBatching()
+        self.assignment_strategy = GreedyNearestAssignment()
+        self.sequencing_strategy = GreedySequencing()
         self.tick_delay = 2.0  # Default 2 seconds
         
         # New Routing Configuration
@@ -82,7 +87,7 @@ class SimulationEngine:
         """Batch pending orders."""
         pending = [o for o in self.orders[:self.orders_released] if o["status"] == "pending"]
         if pending:
-            self.batches = batch_orders(pending)
+            self.batches = self.batching_strategy.batch(pending)
             return len(self.batches)
         return 0
 
@@ -90,7 +95,7 @@ class SimulationEngine:
         """Assign idle drivers to batches."""
         unassigned = [b for b in self.batches if not b.get("assigned", False)]
         if unassigned:
-            assignments = assign_drivers_to_batches(
+            assignments = self.assignment_strategy.assign(
                 self.drivers, unassigned, self.orders[:self.orders_released]
             )
             return len(assignments)
@@ -121,7 +126,8 @@ class SimulationEngine:
                         self.graph, driver, driver_orders,
                         routing_mode=self.routing_mode,
                         manual_algorithm=self.manual_algorithm,
-                        traffic_level=avg_traffic
+                        traffic_level=avg_traffic,
+                        sequencing_strategy=self.sequencing_strategy
                     )
                     driver["route_coords"] = route_coords
                     driver["route_progress"] = 0
