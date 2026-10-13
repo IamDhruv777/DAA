@@ -343,16 +343,25 @@ async def inject_dual_order():
 
 @app.post("/api/simulation/config")
 async def update_config(data: dict):
-    """Update simulation routing configuration."""
+    """Update simulation routing configuration and dynamic tick delay."""
     if "routing_mode" in data:
         simulation.routing_mode = data["routing_mode"]
     if "manual_algorithm" in data:
         simulation.manual_algorithm = data["manual_algorithm"]
+    if "tick_delay" in data:
+        delay = float(data["tick_delay"])
+        simulation.tick_delay = delay
+        dual_simulation.tick_delay = delay
+        if hasattr(dual_simulation, "baseline") and dual_simulation.baseline:
+            dual_simulation.baseline.tick_delay = delay
+        if hasattr(dual_simulation, "optimized") and dual_simulation.optimized:
+            dual_simulation.optimized.tick_delay = delay
     return {
         "status": "success", 
         "config": {
             "routing_mode": simulation.routing_mode, 
-            "manual_algorithm": simulation.manual_algorithm
+            "manual_algorithm": simulation.manual_algorithm,
+            "tick_delay": simulation.tick_delay
         }
     }
 

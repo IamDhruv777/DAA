@@ -205,55 +205,59 @@ class SimulationEngine:
         if traffic_mult <= 0.1:
             traffic_mult = 1.0
         
-        # Effective speed in meters per second
-        speed_kmh = 40 / traffic_mult
-        speed_mps = speed_kmh * 1000 / 3600
-        dist_to_move = speed_mps * self.tick_delay
+        # Base speed 45 km/h adjusted by traffic conditions
+        traffic_mult = max(0.6, min(2.5, traffic_mult))
+        base_speed_mps = (45.0 / traffic_mult) * (1000.0 / 3600.0)
+        
+        # Target distance to cover per tick (dynamically scaled for city visualization)
+        # At 1x speed (tick_delay ~0.8s), covers ~80-120m per tick (2-3 road intersections)
+        sim_scale = max(1.0, 0.8 / max(0.05, self.tick_delay))
+        target_dist_per_tick = max(60.0, base_speed_mps * 6.0 * sim_scale)
 
         for driver in self.drivers:
             if driver["status"] in ("delivering", "picking") and driver["route_coords"]:
                 route = driver["route_coords"]
-                progress = driver["route_progress"]
+                progress = driver.get("route_progress", 0)
                 
                 if progress >= len(route) - 1:
                     self._complete_delivery(driver)
                     continue
 
-                # Move along the coordinate list based on distance
-                accumulated_dist = 0
+                accumulated_dist = 0.0
                 new_progress = progress
-                interp_pos = None
 
-                while accumulated_dist < dist_to_move and new_progress < len(route) - 1:
+                # Step forward through waypoints until covering target_dist_per_tick
+                while new_progress < len(route) - 1:
                     p1 = route[new_progress]
                     p2 = route[new_progress + 1]
-                    # Haversine distance between points
-                    dx = (p2[0] - p1[0])
-                    dy = (p2[1] - p1[1])
-                    segment_dist = math.sqrt(dx ** 2 + dy ** 2) * 111000 # Approx meters
+                    dx = (p2[0] - p1[0]) * 111000.0
+                    dy = (p2[1] - p1[1]) * 111000.0 * 0.95
+                    seg_dist = math.hypot(dx, dy)
 
-                    if accumulated_dist + segment_dist > dist_to_move:
-                        # Smoothly interpolate position between p1 and p2
-                        rem = dist_to_move - accumulated_dist
-                        ratio = max(0.0, min(1.0, rem / max(0.001, segment_dist)))
-                        interp_pos = [
-                            p1[0] + (p2[0] - p1[0]) * ratio,
-                            p1[1] + (p2[1] - p1[1]) * ratio
-                        ]
-                        accumulated_dist += rem
+                    # If we already advanced at least 1 node and this next segment would overshoot, stop here
+                    if accumulated_dist > 0.0 and (accumulated_dist + seg_dist) > target_dist_per_tick:
                         break
 
-                    accumulated_dist += segment_dist
+                    accumulated_dist += seg_dist
                     new_progress += 1
 
+                    if accumulated_dist >= target_dist_per_tick:
+                        break
+
+                # CRITICAL GUARANTEE: Advance at least 1 node waypoint every single tick
+                if new_progress == progress and progress < len(route) - 1:
+                    p1 = route[progress]
+                    p2 = route[progress + 1]
+                    dx = (p2[0] - p1[0]) * 111000.0
+                    dy = (p2[1] - p1[1]) * 111000.0 * 0.95
+                    accumulated_dist += math.hypot(dx, dy)
+                    new_progress = progress + 1
+
+                # Update physical driver coordinates to the newly reached waypoint
                 driver["route_progress"] = new_progress
-                if interp_pos:
-                    driver["lat"] = interp_pos[0]
-                    driver["lng"] = interp_pos[1]
-                else:
-                    new_pos = route[new_progress]
-                    driver["lat"] = new_pos[0]
-                    driver["lng"] = new_pos[1]
+                new_pos = route[new_progress]
+                driver["lat"] = new_pos[0]
+                driver["lng"] = new_pos[1]
                 driver["stats"]["total_distance_m"] += accumulated_dist
 
                 # Check transition from 'picking' (restaurant) to 'delivering' (customer)
@@ -264,6 +268,10 @@ class SimulationEngine:
                         for order in self.orders[:self.orders_released]:
                             if order["order_id"] in driver["current_orders"]:
                                 order["status"] = "picked"
+
+                # Check if route is now completed
+                if new_progress >= len(route) - 1:
+                    self._complete_delivery(driver)
 
     def trigger_road_closure(self, num_closures=3):
         """Simulates unexpected road closures and forces active drivers to re-route."""

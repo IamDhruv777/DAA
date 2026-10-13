@@ -109,6 +109,22 @@ class KMeansBatching(BatchingAlgorithm):
                 }
                 batches.append(batch_dict)
 
+        # Fallback: ensure every pending order is batched (outliers get single-order batches)
+        batched_set = {oid for b in batches for oid in b["orders"]}
+        for idx, order in enumerate(pending):
+            if order["order_id"] not in batched_set:
+                batch_counter += 1
+                batch_dict = {
+                    "batch_id": f"BATCH-{batch_counter:04d}",
+                    "orders": [order["order_id"]],
+                    "order_indices": [orders.index(order)],
+                    "centroid_lat": float(order["restaurant_lat"]),
+                    "centroid_lng": float(order["restaurant_lng"]),
+                    "num_orders": 1,
+                    "is_priority": order.get("is_priority", False),
+                }
+                batches.append(batch_dict)
+
         return batches
 
 
