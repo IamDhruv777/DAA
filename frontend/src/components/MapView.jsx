@@ -32,36 +32,110 @@ const STATUS_COLORS = {
   customer: '#af52de',   // Apple Purple
 }
 
-// Custom driver icon creator
+// Custom driver icon creator (Miniature Delivery Motorbike)
 function createDriverIcon(status) {
   const color = STATUS_COLORS[status] || '#94a3b8'
   const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36">
+    <svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 34 34">
       <defs>
-        <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
-          <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
-          <feMerge>
-            <feMergeNode in="coloredBlur"/>
-            <feMergeNode in="SourceGraphic"/>
-          </feMerge>
+        <filter id="bike-glow-${status}" x="-30%" y="-30%" width="160%" height="160%">
+          <feDropShadow dx="0" dy="1.5" stdDeviation="2.5" flood-color="${color}" flood-opacity="0.8"/>
         </filter>
       </defs>
-      <circle cx="18" cy="18" r="12" fill="${color}" stroke="white" stroke-width="2.5" filter="url(#glow)"/>
-      <circle cx="18" cy="18" r="4" fill="white"/>
+      <!-- Circular badge background -->
+      <circle cx="17" cy="17" r="14" fill="#0d1117" stroke="${color}" stroke-width="2.2" filter="url(#bike-glow-${status})"/>
+      
+      <!-- Miniature Delivery Motorbike & Box -->
+      <g fill="${color}">
+        <!-- Rear wheel -->
+        <circle cx="9.5" cy="21" r="3.2" fill="none" stroke="${color}" stroke-width="1.8"/>
+        <!-- Front wheel -->
+        <circle cx="23.5" cy="21" r="3.2" fill="none" stroke="${color}" stroke-width="1.8"/>
+        <!-- Chassis / Body frame -->
+        <path d="M9.5 21 L14 16 L19.5 16 L23.5 21" fill="none" stroke="${color}" stroke-width="1.8" stroke-linecap="round"/>
+        <path d="M15 16 L18 10 L21.5 10" fill="none" stroke="${color}" stroke-width="1.8" stroke-linecap="round"/>
+        <!-- Delivery Box on back -->
+        <rect x="7" y="11.5" width="6" height="5" rx="1.2" fill="${color}" stroke="#ffffff" stroke-width="0.7"/>
+        <!-- Rider helmet -->
+        <circle cx="16.5" cy="8.5" r="2.2" fill="${color}"/>
+      </g>
+      
+      <!-- Glowing motion ripple if picking/delivering -->
       ${status !== 'idle' ? `
-        <circle cx="18" cy="18" r="15" fill="none" stroke="${color}" stroke-width="2" opacity="0.5">
-          <animate attributeName="r" from="12" to="22" dur="1.2s" repeatCount="indefinite" />
-          <animate attributeName="opacity" from="0.6" to="0" dur="1.2s" repeatCount="indefinite" />
+        <circle cx="17" cy="17" r="15" fill="none" stroke="${color}" stroke-width="1.8" opacity="0.6">
+          <animate attributeName="r" from="14" to="22" dur="1.2s" repeatCount="indefinite" />
+          <animate attributeName="opacity" from="0.7" to="0" dur="1.2s" repeatCount="indefinite" />
         </circle>
       ` : ''}
     </svg>
   `
   return L.divIcon({
     html: svg,
-    className: 'driver-marker-icon',
-    iconSize: [36, 36],
-    iconAnchor: [18, 18],
-    popupAnchor: [0, -18],
+    className: 'custom-driver-pin',
+    iconSize: [34, 34],
+    iconAnchor: [17, 17],
+    popupAnchor: [0, -17],
+  })
+}
+
+// Custom restaurant icon (Miniature Storefront Building)
+function createRestaurantIcon() {
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">
+      <defs>
+        <filter id="rest-shadow" x="-20%" y="-20%" width="140%" height="140%">
+          <feDropShadow dx="0" dy="1.5" stdDeviation="2" flood-color="#ff9500" flood-opacity="0.8"/>
+        </filter>
+      </defs>
+      <circle cx="14" cy="14" r="12" fill="#18130e" stroke="#ff9500" stroke-width="2" filter="url(#rest-shadow)"/>
+      <g fill="#ff9500">
+        <!-- Roof Awning -->
+        <path d="M6 10 L14 5 L22 10 Z"/>
+        <!-- Building Frame -->
+        <rect x="7.5" y="11" width="13" height="9" rx="1" fill="none" stroke="#ff9500" stroke-width="1.4"/>
+        <!-- Door -->
+        <rect x="12" y="13.5" width="4" height="6.5" rx="0.5" fill="#ff9500"/>
+        <!-- Windows -->
+        <rect x="9" y="12.5" width="2" height="2.5" fill="#ff9500"/>
+        <rect x="17" y="12.5" width="2" height="2.5" fill="#ff9500"/>
+      </g>
+    </svg>
+  `
+  return L.divIcon({
+    html: svg,
+    className: 'custom-restaurant-pin',
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+    popupAnchor: [0, -14],
+  })
+}
+
+// Custom customer icon (Miniature Person Avatar)
+function createCustomerIcon() {
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 26 26">
+      <defs>
+        <filter id="cust-shadow" x="-20%" y="-20%" width="140%" height="140%">
+          <feDropShadow dx="0" dy="1.5" stdDeviation="2" flood-color="#af52de" flood-opacity="0.8"/>
+        </filter>
+      </defs>
+      <circle cx="13" cy="13" r="11" fill="#160f1c" stroke="#af52de" stroke-width="2" filter="url(#cust-shadow)"/>
+      <g fill="#af52de">
+        <!-- Head -->
+        <circle cx="13" cy="8.5" r="3.2"/>
+        <!-- Hair detail -->
+        <path d="M10.2 8 C10.2 5.8 15.8 5.8 15.8 8 Z" fill="#ffffff" opacity="0.35"/>
+        <!-- Shoulders / Torso -->
+        <path d="M7.5 19 C7.5 14.5 10 13 13 13 C16 13 18.5 14.5 18.5 19 Z"/>
+      </g>
+    </svg>
+  `
+  return L.divIcon({
+    html: svg,
+    className: 'custom-customer-pin',
+    iconSize: [26, 26],
+    iconAnchor: [13, 13],
+    popupAnchor: [0, -13],
   })
 }
 
@@ -122,6 +196,10 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
     return icons
   }, [])
 
+  // Memoize restaurant and customer custom icons
+  const restaurantIcon = useMemo(() => createRestaurantIcon(), [])
+  const customerIcon = useMemo(() => createCustomerIcon(), [])
+
   // Route polylines from active drivers
   const routes = useMemo(() => {
     return drivers
@@ -165,40 +243,42 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
         <MapUpdater city={city} />
         <HeatmapLayer points={heatmapPoints} visible={showHeatmap} />
 
-        {/* Delivery routes (Layered for Glow) */}
+        {/* Delivery routes (Smooth Neon Solid Glow — No ugly dotted red line!) */}
         {routes.map(route => {
           const color = STATUS_COLORS[route.status] || '#0a84ff';
           return (
             <div key={`route-group-${route.id}`}>
-              {/* Outer Glow */}
+              {/* Outer Ambient Glow */}
               <Polyline
                 positions={route.coords}
                 pathOptions={{
                   color: color,
                   weight: 8,
-                  opacity: 0.15,
+                  opacity: 0.25,
                   lineCap: 'round',
+                  lineJoin: 'round',
                 }}
               />
-              {/* Mid Glow */}
+              {/* Vivid Neon Delivery Path */}
               <Polyline
                 positions={route.coords}
                 pathOptions={{
                   color: color,
-                  weight: 4,
-                  opacity: 0.3,
+                  weight: 3.5,
+                  opacity: 0.95,
                   lineCap: 'round',
+                  lineJoin: 'round',
                 }}
               />
-              {/* Main Path */}
+              {/* Center Core Highlight for Apple-Maps Finish */}
               <Polyline
                 positions={route.coords}
                 pathOptions={{
-                  color: color,
-                  weight: 2,
-                  opacity: 0.8,
+                  color: '#ffffff',
+                  weight: 1.2,
+                  opacity: 0.75,
                   lineCap: 'round',
-                  dashArray: route.status === 'delivering' ? '1, 6' : '10, 5',
+                  lineJoin: 'round',
                 }}
               />
             </div>
@@ -221,53 +301,41 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
           />
         )}
 
-        {/* Restaurant markers (Pulse) */}
+        {/* Restaurant markers (Storefront Building Pin) */}
         {orders.map(order => (
-          <CircleMarker
+          <Marker
             key={`rest-${order.order_id}`}
-            center={[order.restaurant_lat, order.restaurant_lng]}
-            radius={7}
-            pathOptions={{
-              fillColor: STATUS_COLORS.restaurant,
-              fillOpacity: 0.9,
-              color: 'white',
-              weight: 2,
-            }}
+            position={[order.restaurant_lat, order.restaurant_lng]}
+            icon={restaurantIcon}
           >
             <Popup>
               <div className="driver-popup">
-                <h4>🍕 {order.restaurant_name || "Restaurant"}</h4>
+                <h4>🏬 {order.restaurant_name || "Restaurant"}</h4>
                 <p>Zone: {order.restaurant_zone}</p>
                 <p>Status: {order.status}</p>
               </div>
             </Popup>
-          </CircleMarker>
+          </Marker>
         ))}
 
-        {/* Customer markers */}
+        {/* Customer markers (Person Pin) */}
         {orders.map(order => (
-          <CircleMarker
+          <Marker
             key={`cust-${order.order_id}`}
-            center={[order.customer_lat, order.customer_lng]}
-            radius={5}
-            pathOptions={{
-              fillColor: STATUS_COLORS.customer,
-              fillOpacity: 0.8,
-              color: 'white',
-              weight: 1.5,
-            }}
+            position={[order.customer_lat, order.customer_lng]}
+            icon={customerIcon}
           >
             <Popup>
               <div className="driver-popup">
-                <h4>📍 Customer</h4>
+                <h4>👤 Customer</h4>
                 <p>Order: {order.order_id}</p>
                 <p>Status: {order.status}</p>
               </div>
             </Popup>
-          </CircleMarker>
+          </Marker>
         ))}
 
-        {/* Driver markers */}
+        {/* Driver markers (Miniature Motorbike) */}
         {drivers.map(driver => (
           <Marker
             key={driver.driver_id}
@@ -292,19 +360,19 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
           <div className="map-legend-title">System Status</div>
           <div className="legend-grid">
             <div className="legend-item">
-              <span className="status-dot" style={{ background: STATUS_COLORS.restaurant }}></span> Restaurant
+              <span className="legend-emoji">🏬</span> Restaurant
             </div>
             <div className="legend-item">
-              <span className="status-dot" style={{ background: STATUS_COLORS.customer }}></span> Customer
+              <span className="legend-emoji">👤</span> Customer
             </div>
             <div className="legend-item">
-              <span className="status-dot" style={{ background: STATUS_COLORS.idle, boxShadow: `0 0 10px ${STATUS_COLORS.idle}` }}></span> Idle
+              <span className="status-dot" style={{ background: STATUS_COLORS.idle, boxShadow: `0 0 10px ${STATUS_COLORS.idle}` }}></span> 🏍️ Idle
             </div>
             <div className="legend-item">
-              <span className="status-dot" style={{ background: STATUS_COLORS.picking, boxShadow: `0 0 10px ${STATUS_COLORS.picking}` }}></span> Picking
+              <span className="status-dot" style={{ background: STATUS_COLORS.picking, boxShadow: `0 0 10px ${STATUS_COLORS.picking}` }}></span> 🏍️ Picking
             </div>
             <div className="legend-item">
-              <span className="status-dot" style={{ background: STATUS_COLORS.delivering, boxShadow: `0 0 10px ${STATUS_COLORS.delivering}` }}></span> Delivering
+              <span className="status-dot" style={{ background: STATUS_COLORS.delivering, boxShadow: `0 0 10px ${STATUS_COLORS.delivering}` }}></span> 🏍️ Delivering
             </div>
           </div>
         </div>
