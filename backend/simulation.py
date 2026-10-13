@@ -465,8 +465,24 @@ class SimulationEngine:
             else:
                 forward_coords = []
 
+            # Detailed orders payload for rider HUD
+            active_orders_payload = []
+            for oid in d.get("current_orders", []):
+                for o in self.orders[:self.orders_released]:
+                    if o["order_id"] == oid:
+                        active_orders_payload.append({
+                            "order_id": o["order_id"],
+                            "restaurant_name": o.get("restaurant_name", "Cafe Goodluck"),
+                            "restaurant_zone": o.get("restaurant_zone", "Pune Core"),
+                            "status": o["status"],
+                            "is_priority": o.get("is_priority", False),
+                            "items": o.get("items", ["Chicken Biryani", "Butter Naan", "Lassi"])
+                        })
+                        break
+
             driver_positions.append({
                 "driver_id": d["driver_id"],
+                "name": f"Rider {d['driver_id']}",
                 "lat": d["lat"],
                 "lng": d["lng"],
                 "status": d["status"],
@@ -474,6 +490,10 @@ class SimulationEngine:
                 "progress": d["route_progress"],
                 "active_batch": d["active_batch"],
                 "deliveries": d["stats"]["deliveries_completed"],
+                "total_dist_km": round(d["stats"].get("total_distance_m", 0) / 1000.0, 2),
+                "speed_kmh": 38.0 if d["status"] != "idle" else 0.0,
+                "battery_pct": max(15, 100 - (d["stats"]["deliveries_completed"] * 6)),
+                "current_orders": active_orders_payload,
             })
 
         # Get visible orders (restaurants & customers)

@@ -3,6 +3,7 @@ import MapView from './MapView';
 import MetricsPanel from './MetricsPanel';
 import AlgorithmSelector from './AlgorithmSelector';
 import SimControls from './SimControls';
+import AlgorithmBattleModal from './AlgorithmBattleModal';
 import './Dashboard.css';
 
 function Dashboard({
@@ -27,6 +28,7 @@ function Dashboard({
   const [showHeatmap, setShowHeatmap] = useState(false);
   const [darkMode, setDarkMode] = useState(true);
   const [activeBannerMessage, setActiveBannerMessage] = useState(null);
+  const [showBattleModal, setShowBattleModal] = useState(false);
 
   useEffect(() => {
     if (simState?.reroute_event?.message) {
@@ -48,6 +50,25 @@ function Dashboard({
         </div>
 
         <div className="header-right">
+          <button
+            className="btn btn-dual-toggle"
+            style={{
+              background: 'linear-gradient(135deg, #10b981, #06b6d4)',
+              border: 'none',
+              color: '#fff',
+              fontWeight: '700',
+              padding: '6px 13px',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontSize: '12px',
+              boxShadow: '0 2px 10px rgba(16, 185, 129, 0.3)'
+            }}
+            onClick={() => setShowBattleModal(true)}
+            title="Empirical head-to-head race between A*, Dijkstra, Bellman-Ford, and BFS"
+          >
+            🏆 Algorithm Race
+          </button>
+
           <button
             className="btn btn-dual-toggle"
             style={{
@@ -188,6 +209,11 @@ function Dashboard({
           {children}
         </aside>
       </main>
+
+      <AlgorithmBattleModal 
+        isOpen={showBattleModal} 
+        onClose={() => setShowBattleModal(false)} 
+      />
     </div>
   );
 }

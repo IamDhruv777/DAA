@@ -445,24 +445,14 @@ async def compare_algorithms(from_lat: float, from_lng: float, to_lat: float, to
 
         results[algo] = {
             "distance_m": result.get("total_distance_m", 0),
-            "time_ms": round(elapsed, 2),
-            "path_length": len(result.get("path", [])),
-            "algorithm": algo
+            "time_ms": result.get("calc_time_ms", round(elapsed, 2)),
+            "path_length": result.get("num_nodes", len(result.get("path_nodes", []))),
+            "nodes_explored": result.get("nodes_explored", 0),
+            "estimated_time_s": result.get("estimated_time_s", 0),
+            "algorithm": algo,
+            "path_coords": result.get("path_coords", []),
+            "error": result.get("error", None)
         }
-
-    # Floyd-Warshall on small subgraph
-    import random
-    nodes = list(G.nodes())
-    subset = random.sample(nodes, min(100, len(nodes)))
-    start = time.time()
-    fw_result = floyd_warshall_subgraph(G, subset)
-    elapsed = (time.time() - start) * 1000
-
-    results["floyd_warshall"] = {
-        "distance_m": fw_result.get("shortest_distances", {}).get((source, target), 0),
-        "time_ms": round(elapsed, 2),
-        "algorithm": "floyd_warshall"
-    }
 
     return results
 

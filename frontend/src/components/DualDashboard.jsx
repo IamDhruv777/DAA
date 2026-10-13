@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import MapView from './MapView';
+import AlgorithmBattleModal from './AlgorithmBattleModal';
 import './DualDashboard.css';
 
 function DualDashboard({
@@ -20,6 +21,7 @@ function DualDashboard({
   const [trafficLoading, setTrafficLoading] = useState(false);
   const [orderLoading, setOrderLoading] = useState(false);
   const [activeBannerMessage, setActiveBannerMessage] = useState(null);
+  const [showBattleModal, setShowBattleModal] = useState(false);
 
   // Auto-listen to dynamic re-route events from backend WebSocket
   React.useEffect(() => {
@@ -183,6 +185,20 @@ function DualDashboard({
             {orderLoading ? '📦 Injecting...' : '📦 VIP Order'}
           </button>
 
+          <button 
+            className="btn btn-closure" 
+            onClick={() => setShowBattleModal(true)}
+            style={{ 
+              background: 'linear-gradient(135deg, #10b981, #06b6d4)', 
+              borderColor: '#10b981', 
+              color: '#ffffff', 
+              fontWeight: '700' 
+            }}
+            title="Empirical head-to-head race between A*, Dijkstra, Bellman-Ford, and BFS"
+          >
+            🏆 Algorithm Race
+          </button>
+
           <button className="btn btn-switch" onClick={onSwitchToSingleView}>
             🚴 Single View
           </button>
@@ -311,6 +327,11 @@ function DualDashboard({
           </div>
         </section>
       </main>
+
+      <AlgorithmBattleModal 
+        isOpen={showBattleModal} 
+        onClose={() => setShowBattleModal(false)} 
+      />
     </div>
   );
 }

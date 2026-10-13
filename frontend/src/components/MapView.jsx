@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import RiderFlightDeck from './RiderFlightDeck'
 
 // Attach L to window so plugins like leaflet.heat can find it
 window.L = L
@@ -210,8 +211,25 @@ function MapUpdater({ city }) {
   return null
 }
 
+// Smooth auto-follow map controller for selected rider
+function FollowController({ targetCoords, isFollowing }) {
+  const map = useMap()
+  useEffect(() => {
+    if (isFollowing && targetCoords) {
+      map.panTo(targetCoords, { animate: true, duration: 0.6 })
+    }
+  }, [map, targetCoords, isFollowing])
+  return null
+}
+
 function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city, closedRoads = [], speed = 1 }) {
   const mapCenter = CITY_COORDS[city] || CITY_COORDS["Pune, India"]
+  const [selectedDriverId, setSelectedDriverId] = useState(null)
+  const [isFollowing, setIsFollowing] = useState(false)
+
+  const selectedDriver = useMemo(() => {
+    return drivers.find(d => d.driver_id === selectedDriverId) || null
+  }, [drivers, selectedDriverId])
   
   // Create driver icons memo
   const driverIcons = useMemo(() => {
@@ -285,6 +303,10 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
         />
 
         <MapUpdater city={city} />
+        <FollowController 
+          targetCoords={selectedDriver ? [selectedDriver.lat, selectedDriver.lng] : null} 
+          isFollowing={isFollowing} 
+        />
         <HeatmapLayer points={heatmapPoints} visible={showHeatmap} />
 
         {/* Delivery routes (Smooth Neon Solid Glow — No ugly dotted red line!) */}
@@ -385,6 +407,11 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
             key={driver.driver_id}
             position={[driver.lat, driver.lng]}
             icon={driverIcons[driver.status] || driverIcons.idle}
+            eventHandlers={{
+              click: () => {
+                setSelectedDriverId(driver.driver_id)
+              }
+            }}
           >
             <Popup>
               <div className="driver-popup">
@@ -392,6 +419,9 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
                 <span className={`status-tag ${driver.status}`}>{driver.status.toUpperCase()}</span>
                 <p>Deliveries: {driver.deliveries || 0}</p>
                 {driver.active_batch && <p>Batch: {driver.active_batch}</p>}
+                <div style={{ marginTop: '6px', fontSize: '11px', color: '#58a6ff' }}>
+                  ℹ️ Click bike anytime to view Flight Deck HUD
+                </div>
               </div>
             </Popup>
           </Marker>
@@ -466,6 +496,19 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
             </div>
           </div>
         </div>
+      )}
+
+      {/* Rider Flight Deck HUD */}
+      {selectedDriver && (
+        <RiderFlightDeck
+          driver={selectedDriver}
+          isFollowing={isFollowing}
+          onToggleFollow={() => setIsFollowing(prev => !prev)}
+          onClose={() => {
+            setSelectedDriverId(null)
+            setIsFollowing(false)
+          }}
+        />
       )}
     </div>
   )

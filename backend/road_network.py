@@ -181,6 +181,15 @@ def load_graph(city_name="Pune, India"):
     else:
         _graph = _create_synthetic_graph()
 
+    # Ensure graph is strongly connected so every origin can reach every destination
+    try:
+        sccs = list(nx.strongly_connected_components(_graph))
+        if len(sccs) > 1:
+            largest = max(sccs, key=len)
+            _graph = _graph.subgraph(largest).copy()
+    except Exception as e:
+        print(f"Warning checking SCC: {e}")
+
     _graph.city_name = city_name
     return _graph
 

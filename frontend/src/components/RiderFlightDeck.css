@@ -1,0 +1,301 @@
+/* ===================================================
+   Rider Flight Deck HUD — Glassmorphic Telemetry Overlay
+   =================================================== */
+
+.rider-flight-deck {
+  position: absolute;
+  bottom: 24px;
+  right: 24px;
+  width: 320px;
+  max-width: calc(100vw - 48px);
+  background: rgba(13, 17, 23, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.65), 0 0 24px rgba(10, 132, 255, 0.15);
+  border-radius: 16px;
+  padding: 16px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: #f0f6fc;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  animation: flightDeckSlideUp 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  pointer-events: auto;
+}
+
+@keyframes flightDeckSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Header */
+.deck-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 10px;
+}
+
+.deck-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rider-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #161b22;
+  border: 2px solid #0a84ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  transition: all 0.3s ease;
+}
+
+.rider-name {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.2px;
+}
+
+.rider-id-tag {
+  font-size: 11px;
+  font-family: monospace;
+  color: #8b949e;
+}
+
+.deck-close-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #8b949e;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  transition: all 0.2s ease;
+}
+
+.deck-close-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+  transform: scale(1.05);
+}
+
+/* Status Pill */
+.deck-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.deck-status-bar .status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.deck-status-bar .status-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Telemetry Grid */
+.telemetry-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.telemetry-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+}
+
+.telem-label {
+  font-size: 10px;
+  color: #8b949e;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
+}
+
+.telem-val {
+  font-size: 14px;
+  font-weight: 700;
+  color: #ffffff;
+  font-family: monospace;
+}
+
+.telem-unit {
+  font-size: 10px;
+  font-weight: normal;
+  color: #8b949e;
+}
+
+/* Active Order Card */
+.deck-order-card {
+  background: rgba(10, 132, 255, 0.08);
+  border: 1px solid rgba(10, 132, 255, 0.25);
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.order-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.order-id-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: #58a6ff;
+  background: rgba(56, 139, 253, 0.15);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: monospace;
+}
+
+.priority-badge {
+  font-size: 10px;
+  font-weight: 700;
+  color: #ffd60a;
+  background: rgba(255, 214, 10, 0.15);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.order-details-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.order-detail-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.detail-icon {
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.detail-sub {
+  display: block;
+  font-size: 10px;
+  color: #8b949e;
+}
+
+.detail-items {
+  color: #d1d5db;
+  font-style: italic;
+}
+
+.deck-idle-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 12px 10px;
+  font-size: 11px;
+  color: #8b949e;
+  text-align: center;
+  line-height: 1.4;
+}
+
+/* Routing Info */
+.deck-routing-info {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.routing-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.routing-icon {
+  font-size: 15px;
+}
+
+.routing-sub {
+  display: block;
+  font-size: 9.5px;
+  color: #8b949e;
+  margin-top: 2px;
+}
+
+/* Actions */
+.deck-actions {
+  margin-top: 4px;
+}
+
+.btn-follow {
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: #1f6feb;
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.btn-follow:hover {
+  background: #388bfd;
+  box-shadow: 0 4px 14px rgba(31, 111, 235, 0.4);
+  transform: translateY(-1px);
+}
+
+.btn-follow.following {
+  background: rgba(218, 54, 51, 0.18);
+  border-color: #f85149;
+  color: #ff7b72;
+}
+
+.btn-follow.following:hover {
+  background: rgba(218, 54, 51, 0.32);
+  box-shadow: 0 4px 14px rgba(248, 81, 73, 0.35);
+}
