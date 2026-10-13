@@ -97,6 +97,8 @@ function Dashboard({
           <MapView
             drivers={simState?.drivers || []}
             orders={simState?.orders || []}
+            closedRoads={simState?.closed_roads || []}
+            speed={simSetupConfig.speed || 1}
             isRunning={isRunning}
             showHeatmap={showHeatmap}
             city={simSetupConfig.city}

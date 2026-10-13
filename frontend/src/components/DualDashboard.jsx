@@ -208,6 +208,8 @@ function DualDashboard({
             <MapView
               drivers={baseline.drivers || []}
               orders={baseline.orders || []}
+              closedRoads={baseline.closed_roads || []}
+              speed={config?.speed || 1}
               isRunning={isDualRunning}
               showHeatmap={false}
               city="Pune, India"
@@ -237,6 +239,8 @@ function DualDashboard({
             <MapView
               drivers={optimized.drivers || []}
               orders={optimized.orders || []}
+              closedRoads={optimized.closed_roads || []}
+              speed={config?.speed || 1}
               isRunning={isDualRunning}
               showHeatmap={false}
               city="Pune, India"

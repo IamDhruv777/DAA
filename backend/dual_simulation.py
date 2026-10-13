@@ -102,6 +102,7 @@ class DualSimulationEngine:
                     self.baseline.graph[u][v][key]["travel_time"] = 1000000.0
                     self.baseline.graph[u][v][key]["weight"] = 1000000.0
         
+        self.baseline.closed_roads = copy.deepcopy(self.optimized.closed_roads)
         return closures
 
     def get_state(self):

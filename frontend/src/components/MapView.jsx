@@ -139,6 +139,32 @@ function createCustomerIcon() {
   })
 }
 
+// Custom Roadblock Icon (White Barrier Hazard Pin)
+function createRoadblockIcon() {
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 30 30">
+      <defs>
+        <filter id="block-glow" x="-30%" y="-30%" width="160%" height="160%">
+          <feDropShadow dx="0" dy="1.5" stdDeviation="3" flood-color="#ffffff" flood-opacity="0.95"/>
+        </filter>
+      </defs>
+      <!-- Base circle badge -->
+      <circle cx="15" cy="15" r="13" fill="#0c0d12" stroke="#ffffff" stroke-width="2.5" filter="url(#block-glow)"/>
+      <!-- Barrier Board -->
+      <rect x="6" y="11.5" width="18" height="7" rx="1.5" fill="#ffffff"/>
+      <!-- Hazard stripes in black -->
+      <path d="M8 11.5 L11 18.5 M13 11.5 L16 18.5 M18 11.5 L21 18.5" stroke="#0c0d12" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+  `
+  return L.divIcon({
+    html: svg,
+    className: 'custom-roadblock-pin',
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
+    popupAnchor: [0, -15],
+  })
+}
+
 // Heatmap layer component
 function HeatmapLayer({ points, visible }) {
   const map = useMap()
@@ -184,7 +210,7 @@ function MapUpdater({ city }) {
   return null
 }
 
-function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city }) {
+function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city, closedRoads = [], speed = 1 }) {
   const mapCenter = CITY_COORDS[city] || CITY_COORDS["Pune, India"]
   
   // Create driver icons memo
@@ -196,9 +222,10 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
     return icons
   }, [])
 
-  // Memoize restaurant and customer custom icons
+  // Memoize restaurant, customer, and roadblock custom icons
   const restaurantIcon = useMemo(() => createRestaurantIcon(), [])
   const customerIcon = useMemo(() => createCustomerIcon(), [])
+  const roadblockIcon = useMemo(() => createRoadblockIcon(), [])
 
   // Route polylines from active drivers
   const routes = useMemo(() => {
@@ -224,7 +251,17 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
   }, [orders])
 
   return (
-    <div className="map-container" style={{ height: '100%', width: '100%', position: 'absolute', top: 0, left: 0 }}>
+    <div 
+      className="map-container" 
+      style={{ 
+        height: '100%', 
+        width: '100%', 
+        position: 'absolute', 
+        top: 0, 
+        left: 0,
+        '--move-duration': `${(1.9 / (speed || 1)).toFixed(2)}s`
+      }}
+    >
       <MapContainer
         center={mapCenter}
         zoom={12}
@@ -352,6 +389,49 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
             </Popup>
           </Marker>
         ))}
+
+        {/* Closed Roads Blockages in Prominent WHITE Color */}
+        {closedRoads.map((closure, idx) => (
+          <div key={`closed-road-${idx}`}>
+            {/* Outer White Hazard Glow */}
+            <Polyline
+              positions={closure.coords}
+              pathOptions={{
+                color: '#ffffff',
+                weight: 12,
+                opacity: 0.5,
+                lineCap: 'round',
+              }}
+            />
+            {/* Bright Solid White Hazard Line */}
+            <Polyline
+              positions={closure.coords}
+              pathOptions={{
+                color: '#ffffff',
+                weight: 5,
+                opacity: 0.95,
+                dashArray: '8, 8',
+                lineCap: 'round',
+              }}
+            />
+            {/* Roadblock Icon Marker in Center */}
+            <Marker
+              position={[
+                (closure.coords[0][0] + closure.coords[1][0]) / 2,
+                (closure.coords[0][1] + closure.coords[1][1]) / 2
+              ]}
+              icon={roadblockIcon}
+            >
+              <Popup>
+                <div className="driver-popup">
+                  <h4>🚧 ROAD CLOSED</h4>
+                  <p>Status: Impassable (1,000,000s)</p>
+                  <p>Dynamic A* re-routing around blockage!</p>
+                </div>
+              </Popup>
+            </Marker>
+          </div>
+        ))}
       </MapContainer>
 
       {/* Map overlay legend (Premium) */}
@@ -364,6 +444,9 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
             </div>
             <div className="legend-item">
               <span className="legend-emoji">👤</span> Customer
+            </div>
+            <div className="legend-item">
+              <span className="legend-emoji">🚧</span> Blocked
             </div>
             <div className="legend-item">
               <span className="status-dot" style={{ background: STATUS_COLORS.idle, boxShadow: `0 0 10px ${STATUS_COLORS.idle}` }}></span> 🏍️ Idle

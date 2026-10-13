@@ -52,6 +52,7 @@ class SimulationEngine:
         self.use_cvrptw = False  # Toggleable via UI / API
 
         self.tick_delay = 2.0  # Default 2 seconds
+        self.closed_roads = []  # List of {nodes: [u, v], coords: [c1, c2]}
         
         # New Routing Configuration
         self.routing_mode = "dynamic" # "dynamic" or "manual"
@@ -62,6 +63,7 @@ class SimulationEngine:
         print(f"[SIM] Initializing simulation for {city_name} with {num_drivers} drivers and {num_orders} orders...")
         self.graph = load_graph(city_name)
         self.tick_delay = tick_delay
+        self.closed_roads = []
 
         print(f"[SIM] Generating {num_orders} orders...")
         self.orders = generate_orders(self.graph, num_orders=num_orders, city_name=city_name)
@@ -241,7 +243,16 @@ class SimulationEngine:
     def trigger_road_closure(self, num_closures=3):
         """Simulates unexpected road closures and forces active drivers to re-route."""
         from traffic import simulate_road_closures
+        from road_network import get_node_coords
         closures = simulate_road_closures(self.graph, num_closures)
+        
+        for u, v in closures:
+            c1 = get_node_coords(self.graph, u)
+            c2 = get_node_coords(self.graph, v)
+            self.closed_roads.append({
+                "nodes": [u, v],
+                "coords": [c1, c2]
+            })
         
         # Log the incident in metrics or print
         print(f"[Simulation] Dynamic Event: {len(closures)} roads closed! Re-routing active drivers...")
@@ -382,6 +393,7 @@ class SimulationEngine:
             "metrics": self.metrics,
             "drivers": driver_positions,
             "orders": visible_orders[:100],  # Limit for performance
+            "closed_roads": self.closed_roads,
             "is_running": self.is_running,
             "config": {
                 "routing_mode": self.routing_mode,

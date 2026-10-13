@@ -650,3 +650,22 @@ body {
 /* Dark mode filter for OSM tiles */
 .dark-osm-tiles { filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%); }
 
+/* Butter-Smooth Continuous Driver Movement (Eliminates walking/stopping stutter) */
+.custom-driver-pin {
+  transition: transform var(--move-duration, 1.8s) linear !important;
+  will-change: transform;
+}
+.leaflet-marker-icon.custom-driver-pin {
+  transition: transform var(--move-duration, 1.8s) linear !important;
+  will-change: transform;
+}
+
+/* Roadblock styling */
+.custom-roadblock-pin {
+  animation: pulseRoadblock 1.5s infinite alternate ease-in-out;
+}
+@keyframes pulseRoadblock {
+  from { filter: drop-shadow(0 0 3px #ffffff); }
+  to { filter: drop-shadow(0 0 10px #ffffff); }
+}
+
