@@ -32,6 +32,41 @@ const PRESET_CORRIDORS = [
   }
 ];
 
+const EVAL_MODES = {
+  optimal: {
+    id: 'optimal',
+    label: '🎯 1-to-1 GPS Navigation (Point-to-Point)',
+    winnerKey: 'astar',
+    badgeText: '👑 BEST NAVIGATION',
+    title: 'A* is Mathematically Optimal for Single-Target Routes',
+    rationale: 'Because Euclidean Haversine distance is an admissible heuristic h(n) ≤ h*(n), A* is mathematically guaranteed to find the exact shortest path. Unlike Dijkstra which explores in 360° concentric circles (searching nodes backwards), A* prunes away irrelevant directions, exploring 68%–87% fewer nodes.'
+  },
+  dispatch: {
+    id: 'dispatch',
+    label: '🌐 1-to-Many Fleet Dispatch (Multi-Driver)',
+    winnerKey: 'dijkstra',
+    badgeText: '👑 BEST DISPATCH ENGINE',
+    title: 'Dijkstra Wins for One-to-Many Driver Matching',
+    rationale: 'A* can only pull towards a SINGLE target point. When matching 1 restaurant to 50 active drivers across the city, A* would have to run 50 separate times! Dijkstra computes shortest paths to ALL drivers in the city simultaneously in 1 single run.'
+  },
+  speed: {
+    id: 'speed',
+    label: '⚡ Fewest Turns & Hop Count (Sub-10ms)',
+    winnerKey: 'bfs',
+    badgeText: '👑 FASTEST RAW QUEUE',
+    title: 'BFS Wins for Turn Minimization & Lowest Compute Overhead',
+    rationale: 'BFS runs in strict linear O(V + E) using a simple FIFO queue without Min-Heap priority queue log(V) sorting overhead. It finishes in under 10ms and finds the path with the fewest highway interchanges or turn junctions.'
+  },
+  robustness: {
+    id: 'robustness',
+    label: '🛡️ Dynamic Credits & Toll Rebates (Negative Costs)',
+    winnerKey: 'bellman_ford',
+    badgeText: '👑 MOST ROBUST',
+    title: 'Bellman-Ford Wins when Toll Rebates or Negative Cycles Exist',
+    rationale: 'Both Dijkstra and A* assume edge weights are non-negative (w ≥ 0). If city toll rebates, promotional delivery credits, or negative cost adjustments occur, Dijkstra and A* fail or enter infinite loops. Bellman-Ford correctly relaxes all edges and detects cycles.'
+  }
+};
+
 const ALGO_METADATA = {
   astar: {
     displayName: 'A* Heuristic Search',
@@ -51,7 +86,7 @@ const ALGO_METADATA = {
     spaceComplexity: 'O(V)',
     heuristic: 'None (Uniform Cost g(n))',
     guarantee: 'Optimal & Complete',
-    vivaNote: 'Explores radially in all directions with a Min-Priority Queue. Computes mathematically optimal shortest paths but wastes time exploring opposite directions.'
+    vivaNote: 'Explores radially in all directions with a Min-Priority Queue. Computes mathematically optimal shortest paths to ALL nodes simultaneously.'
   },
   bellman_ford: {
     displayName: 'Bellman-Ford Algorithm',
@@ -61,7 +96,7 @@ const ALGO_METADATA = {
     spaceComplexity: 'O(V)',
     heuristic: 'None (Edge Relaxation)',
     guarantee: 'Detects Negative Cycles',
-    vivaNote: 'Relaxes all graph edges |V| - 1 times. Essential when negative edge weights can occur, but significantly slower than Dijkstra on large OSM road networks.'
+    vivaNote: 'Relaxes all graph edges |V| - 1 times. Essential when negative edge weights or toll discounts occur, but slower on large OSM graphs.'
   },
   bfs: {
     displayName: 'Breadth-First Search (BFS)',
@@ -70,8 +105,8 @@ const ALGO_METADATA = {
     timeComplexity: 'O(V + E)',
     spaceComplexity: 'O(V)',
     heuristic: 'Unweighted Queue (FIFO)',
-    guarantee: 'Suboptimal for Metres',
-    vivaNote: 'Finds fewest turns/intersections (minimum edge hops), NOT minimum distance in metres. Demonstrates why unweighted algorithms fail in physical road maps.'
+    guarantee: 'Fewest Edge Turns',
+    vivaNote: 'Finds fewest turns/intersections (minimum edge hops), NOT minimum distance in metres. Demonstrates linear queue vs priority queue speed.'
   },
   greedy: {
     displayName: 'Greedy Best-First',
@@ -81,12 +116,13 @@ const ALGO_METADATA = {
     spaceComplexity: 'O(b^m)',
     heuristic: 'Pure h(n) without g(n)',
     guarantee: 'Inadmissible / Suboptimal',
-    vivaNote: 'Charges headlong toward the goal based purely on remaining straight-line distance. Very fast, but frequently gets trapped by river loops or dead ends.'
+    vivaNote: 'Charges headlong toward the goal based purely on remaining straight-line distance. Fast, but vulnerable to river loops or dead ends.'
   }
 };
 
 function AlgorithmBattleModal({ isOpen, onClose }) {
   const [selectedCorridor, setSelectedCorridor] = useState(PRESET_CORRIDORS[0]);
+  const [evalMode, setEvalMode] = useState('optimal');
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState(null);
   const [error, setError] = useState(null);
@@ -125,6 +161,9 @@ function AlgorithmBattleModal({ isOpen, onClose }) {
 
   if (!isOpen) return null;
 
+  const currentMode = EVAL_MODES[evalMode] || EVAL_MODES.optimal;
+  const winnerKey = currentMode.winnerKey;
+
   // Compute Search Space Reduction % (A* vs Dijkstra)
   let astarNodes = results?.astar?.nodes_explored || 0;
   let dijkstraNodes = results?.dijkstra?.nodes_explored || 0;
@@ -149,7 +188,7 @@ function AlgorithmBattleModal({ isOpen, onClose }) {
 
         {/* Corridor Selector Bar */}
         <div className="corridor-selector-bar">
-          <label className="selector-label">📍 Select Test Corridor:</label>
+          <label className="selector-label">📍 Test Corridor:</label>
           <div className="corridor-pills">
             {PRESET_CORRIDORS.map((c) => (
               <button
@@ -173,17 +212,34 @@ function AlgorithmBattleModal({ isOpen, onClose }) {
           </button>
         </div>
 
-        {/* Dynamic DAA Insight Highlight */}
-        {reductionPct && parseFloat(reductionPct) > 0 && (
-          <div className="battle-insight-banner">
-            <div className="insight-icon">🏆</div>
-            <div className="insight-text">
-              <strong>DAA Heuristic Advantage:</strong> A* pruned{' '}
-              <span className="highlight-stat">{reductionPct}%</span> of the search space compared to Dijkstra
-              ({astarNodes.toLocaleString()} nodes vs {dijkstraNodes.toLocaleString()} nodes), while producing the exact same optimal distance ({results?.astar?.distance_m?.toFixed(0)}m)!
-            </div>
+        {/* Evaluation Lens Selector (Answers: "Why is one best and when does each win?") */}
+        <div className="eval-mode-bar">
+          <label className="eval-mode-label">🏆 Evaluation Problem Domain:</label>
+          <div className="eval-mode-buttons">
+            {Object.values(EVAL_MODES).map((mode) => (
+              <button
+                key={mode.id}
+                className={`eval-mode-btn ${evalMode === mode.id ? 'active' : ''}`}
+                onClick={() => setEvalMode(mode.id)}
+              >
+                {mode.label}
+              </button>
+            ))}
           </div>
-        )}
+        </div>
+
+        {/* Dynamic Context Explanation Banner */}
+        <div className="battle-insight-banner">
+          <div className="insight-icon">💡</div>
+          <div className="insight-text">
+            <strong>{currentMode.title}:</strong> {currentMode.rationale}
+            {evalMode === 'optimal' && reductionPct && parseFloat(reductionPct) > 0 && (
+              <div style={{ marginTop: '4px', color: '#34c759', fontWeight: 700 }}>
+                📊 Empirical Run: A* pruned {reductionPct}% search space ({astarNodes.toLocaleString()} vs {dijkstraNodes.toLocaleString()} nodes) at identical {results?.astar?.distance_m?.toFixed(0)}m!
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* Error message */}
         {error && <div className="battle-error-bar">{error}</div>}
@@ -192,7 +248,7 @@ function AlgorithmBattleModal({ isOpen, onClose }) {
         <div className="battle-grid">
           {Object.entries(ALGO_METADATA).map(([key, meta]) => {
             const data = results ? results[key] : null;
-            const isWinner = key === 'astar';
+            const isWinner = key === winnerKey;
 
             return (
               <div key={key} className={`battle-card ${isWinner ? 'winner-card' : ''}`}>
@@ -206,7 +262,11 @@ function AlgorithmBattleModal({ isOpen, onClose }) {
                       {meta.badge}
                     </span>
                   </div>
-                  {isWinner && <span className="winner-crown" title="Fastest with Optimal Path">👑 BEST</span>}
+                  {isWinner && (
+                    <span className="winner-crown" title="Top Performer for this problem domain">
+                      {currentMode.badgeText}
+                    </span>
+                  )}
                 </div>
 
                 {/* Metrics Table */}
