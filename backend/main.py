@@ -24,6 +24,7 @@ from traffic import get_traffic_summary, update_traffic
 from orders import get_order_stats
 from drivers import get_driver_stats
 from simulation import SimulationEngine
+from dual_simulation import DualSimulationEngine
 from pydantic import BaseModel
 
 # Try to import ML predictor
@@ -35,6 +36,8 @@ except Exception:
 
 # Global state
 simulation: SimulationEngine = SimulationEngine()
+dual_simulation: DualSimulationEngine = DualSimulationEngine()
+active_mode: str = "single"
 ws_clients: Set[WebSocket] = set()
 sim_task = None
 
@@ -44,9 +47,11 @@ async def lifespan(app):
     """Pre-load graph on startup."""
     print("[APP] Starting Food Delivery Route Optimizer...")
     simulation.initialize()
+    dual_simulation.initialize(num_orders=15, num_drivers=5)
     print("[APP] Ready! API docs at http://localhost:8000/docs")
     yield
     simulation.stop()
+    dual_simulation.stop()
     print("[APP] Shutting down.")
 
 
@@ -163,14 +168,15 @@ class SimStartConfig(BaseModel):
 @app.post("/api/simulation/start")
 async def start_simulation(config: SimStartConfig = None):
     """Start the city-scale simulation."""
-    global sim_task
+    global sim_task, active_mode
+    active_mode = "single"
+    dual_simulation.stop()
 
     if simulation.is_running:
         return {"status": "already_running"}
 
     # Initialize if needed
     if config:
-        # Re-initialize with new config if provided
         try:
             simulation.initialize(num_orders=config.num_orders, num_drivers=config.num_drivers, city_name=config.city)
         except Exception as e:
@@ -192,14 +198,16 @@ async def start_simulation(config: SimStartConfig = None):
 async def stop_simulation():
     """Stop the simulation."""
     simulation.stop()
+    dual_simulation.stop()
     return {"status": "stopped", "metrics": simulation.metrics}
 
 
 @app.post("/api/simulation/reset")
 async def reset_simulation(config: SimStartConfig = None):
     """Reset the simulation."""
-    simulation.stop()
     global sim_task
+    simulation.stop()
+    dual_simulation.stop()
     if sim_task:
         sim_task.cancel()
         sim_task = None
@@ -208,6 +216,71 @@ async def reset_simulation(config: SimStartConfig = None):
     else:
         simulation.initialize()
     return {"status": "reset"}
+
+
+# ─── DUAL SIMULATION BENCHMARK ENDPOINTS ────────────────────────
+
+@app.post("/api/simulation/dual/start")
+async def start_dual_simulation(config: SimStartConfig = None):
+    """Start synchronized A/B benchmark (Baseline Greedy vs SmartRoute Optimized)."""
+    global sim_task, active_mode
+    active_mode = "dual"
+    simulation.stop()
+
+    if dual_simulation.is_running:
+        return {"status": "already_running"}
+
+    orders = config.num_orders if config else 15
+    drivers = config.num_drivers if config else 5
+    city = config.city if config else "Pune, India"
+    delay = config.tick_delay if config else 2.0
+
+    dual_simulation.initialize(num_orders=orders, num_drivers=drivers, city_name=city, tick_delay=delay)
+    sim_task = asyncio.create_task(dual_simulation.run(ws_broadcast_callback=broadcast_state))
+
+    return {
+        "status": "started",
+        "mode": "dual",
+        "orders": orders,
+        "drivers": drivers
+    }
+
+
+@app.post("/api/simulation/dual/stop")
+async def stop_dual_simulation():
+    """Stop dual simulation."""
+    dual_simulation.stop()
+    return {"status": "stopped", "mode": "dual"}
+
+
+@app.post("/api/simulation/dual/reset")
+async def reset_dual_simulation(config: SimStartConfig = None):
+    """Reset dual simulation."""
+    global sim_task
+    dual_simulation.stop()
+    if sim_task:
+        sim_task.cancel()
+        sim_task = None
+    orders = config.num_orders if config else 15
+    drivers = config.num_drivers if config else 5
+    city = config.city if config else "Pune, India"
+    delay = config.tick_delay if config else 2.0
+    dual_simulation.initialize(num_orders=orders, num_drivers=drivers, city_name=city, tick_delay=delay)
+    return {"status": "reset", "mode": "dual"}
+
+
+@app.post("/api/simulation/dual/road-closure")
+async def trigger_dual_road_closure():
+    """Trigger road closures on both simulations to observe comparative re-routing."""
+    if not dual_simulation.is_running:
+        return {"status": "error", "message": "Dual simulation is not running."}
+    closures = dual_simulation.trigger_road_closure(num_closures=4)
+    return {
+        "status": "success",
+        "closures_count": len(closures),
+        "message": f"Closed {len(closures)} roads across both simulations."
+    }
+
 
 @app.post("/api/simulation/road-closure")
 async def trigger_road_closure():

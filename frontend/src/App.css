@@ -646,3 +646,7 @@ body {
 .legend-item {
   display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 500; color: var(--text-secondary);
 }
+
+/* Dark mode filter for OSM tiles */
+.dark-osm-tiles { filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%); }
+

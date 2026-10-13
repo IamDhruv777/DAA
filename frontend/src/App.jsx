@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Dashboard from './components/Dashboard';
+import DualDashboard from './components/DualDashboard';
 import AlgorithmChart from './components/AlgorithmChart';
 import './App.css';
 
@@ -7,13 +8,16 @@ const WS_URL = 'ws://localhost:8000/ws';
 const API_URL = 'http://localhost:8000';
 
 function App() {
+  const [viewMode, setViewMode] = useState('single'); // 'single' or 'dual'
   const [simState, setSimState] = useState(null);
+  const [dualState, setDualState] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
+  const [isDualRunning, setIsDualRunning] = useState(false);
   const [error, setError] = useState(null);
   const [simSetupConfig, setSimSetupConfig] = useState({
-    num_drivers: 50,
-    num_orders: 1000,
+    num_drivers: 5,
+    num_orders: 15,
     city: "Pune, India",
     routing_mode: "dynamic",
     manual_algorithm: "dijkstra",
@@ -49,9 +53,14 @@ function App() {
         try {
           const data = JSON.parse(event.data);
           if (data.type !== 'pong') {
-            setSimState(data);
-            setIsRunning(data.is_running);
-            setIsInitializing(false); // Clear initializing state once data flows
+            if (data.mode === 'dual') {
+              setDualState(data);
+              setIsDualRunning(data.is_running);
+            } else {
+              setSimState(data);
+              setIsRunning(data.is_running);
+              setIsInitializing(false);
+            }
           }
         } catch (e) {
           console.error('[WS] Parse error:', e);
@@ -193,6 +202,67 @@ function App() {
   };
 
 
+  const startDualSimulation = async () => {
+    try {
+      setError(null);
+      const res = await fetch(`${API_URL}/api/simulation/dual/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          num_orders: 15,
+          num_drivers: 5,
+          city: "Pune, India",
+          tick_delay: 2.0 / simSetupConfig.speed
+        })
+      });
+      const data = await res.json();
+      if (data.status === 'started' || data.status === 'already_running') {
+        setIsDualRunning(true);
+      } else {
+        setError(data.message || 'Failed to start dual simulation.');
+      }
+    } catch (e) {
+      setError('Failed to start dual simulation.');
+    }
+  };
+
+  const stopDualSimulation = async () => {
+    try {
+      await fetch(`${API_URL}/api/simulation/dual/stop`, { method: 'POST' });
+      setIsDualRunning(false);
+    } catch (e) {
+      setError('Failed to stop dual simulation.');
+    }
+  };
+
+  const resetDualSimulation = async () => {
+    try {
+      await fetch(`${API_URL}/api/simulation/dual/reset`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          num_orders: 15,
+          num_drivers: 5,
+          city: "Pune, India",
+          tick_delay: 2.0 / simSetupConfig.speed
+        })
+      });
+      setIsDualRunning(false);
+      setDualState(null);
+    } catch (e) {
+      setError('Failed to reset dual simulation.');
+    }
+  };
+
+  const triggerDualRoadClosure = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/simulation/dual/road-closure`, { method: 'POST' });
+      return await res.json();
+    } catch (e) {
+      setError('Failed to trigger road closure.');
+    }
+  };
+
   const fetchDebugRoute = async () => {
     if (!simState || !simState.orders || simState.orders.length === 0) return;
     setDebugLoading(true);
@@ -216,21 +286,38 @@ function App() {
           <button onClick={() => setError(null)}>✕</button>
         </div>
       )}
-      <Dashboard
-        simState={simState}
-        isConnected={isConnected}
-        isRunning={isRunning}
-        config={simState?.config || { routing_mode: simSetupConfig.routing_mode, manual_algorithm: simSetupConfig.manual_algorithm }}
-        onUpdateConfig={updateConfig}
-        simSetupConfig={simSetupConfig}
-        setSimSetupConfig={setSimSetupConfig}
-        onStart={startSimulation}
-        onStop={stopSimulation}
-        onReset={resetSimulation}
-        onCompare={fetchDebugRoute}
-      >
-        <AlgorithmChart comparisonData={debugRouteData} isLoading={debugLoading} />
-      </Dashboard>
+
+      {viewMode === 'dual' ? (
+        <DualDashboard
+          dualState={dualState}
+          isConnected={isConnected}
+          isDualRunning={isDualRunning}
+          onStartDual={startDualSimulation}
+          onStopDual={stopDualSimulation}
+          onResetDual={resetDualSimulation}
+          onTriggerRoadClosure={triggerDualRoadClosure}
+          config={simSetupConfig}
+          onConfigChange={setSimSetupConfig}
+          onSwitchToSingleView={() => setViewMode('single')}
+        />
+      ) : (
+        <Dashboard
+          simState={simState}
+          isConnected={isConnected}
+          isRunning={isRunning}
+          config={simState?.config || { routing_mode: simSetupConfig.routing_mode, manual_algorithm: simSetupConfig.manual_algorithm }}
+          onUpdateConfig={updateConfig}
+          simSetupConfig={simSetupConfig}
+          setSimSetupConfig={setSimSetupConfig}
+          onStart={startSimulation}
+          onStop={stopSimulation}
+          onReset={resetSimulation}
+          onCompare={fetchDebugRoute}
+          onSwitchToDualView={() => setViewMode('dual')}
+        >
+          <AlgorithmChart comparisonData={debugRouteData} isLoading={debugLoading} />
+        </Dashboard>
+      )}
     </>
   );
 }

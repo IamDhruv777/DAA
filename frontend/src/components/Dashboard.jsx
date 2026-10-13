@@ -18,6 +18,7 @@ function Dashboard({
   onStop,
   onReset,
   onCompare,
+  onSwitchToDualView,
   children,
 }) {
   const [showHeatmap, setShowHeatmap] = useState(false);
@@ -35,6 +36,24 @@ function Dashboard({
         </div>
 
         <div className="header-right">
+          <button
+            className="btn btn-dual-toggle"
+            style={{
+              background: 'linear-gradient(135deg, #ff3b30, #007aff)',
+              border: 'none',
+              color: '#fff',
+              fontWeight: '700',
+              padding: '6px 13px',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontSize: '12px',
+              boxShadow: '0 2px 10px rgba(0, 122, 255, 0.3)'
+            }}
+            onClick={onSwitchToDualView}
+          >
+            ⚔️ Side-by-Side Benchmark
+          </button>
+
           <div className="segmented-control">
             <button
               className={`segment-btn ${config.routing_mode === 'dynamic' ? 'active' : ''}`}

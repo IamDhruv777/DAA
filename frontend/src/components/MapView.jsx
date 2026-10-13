@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import 'leaflet.heat'
+
+// Attach L to window so plugins like leaflet.heat can find it
+window.L = L
 
 // Fix Leaflet icon issue
 delete L.Icon.Default.prototype._getIconUrl
@@ -70,15 +72,17 @@ function HeatmapLayer({ points, visible }) {
 
   useEffect(() => {
     if (visible && points.length > 0) {
-      if (heatLayerRef.current) {
-        map.removeLayer(heatLayerRef.current)
-      }
-      heatLayerRef.current = L.heatLayer(points, {
-        radius: 25,
-        blur: 15,
-        maxZoom: 17,
-        gradient: { 0.4: 'blue', 0.6: 'cyan', 0.7: 'lime', 0.8: 'yellow', 1: 'red' }
-      }).addTo(map)
+      import('leaflet.heat').then(() => {
+        if (heatLayerRef.current) {
+          map.removeLayer(heatLayerRef.current)
+        }
+        heatLayerRef.current = L.heatLayer(points, {
+          radius: 25,
+          blur: 15,
+          maxZoom: 17,
+          gradient: { 0.4: 'blue', 0.6: 'cyan', 0.7: 'lime', 0.8: 'yellow', 1: 'red' }
+        }).addTo(map)
+      }).catch(err => console.warn("Failed to load heatmap", err))
     } else if (heatLayerRef.current) {
       map.removeLayer(heatLayerRef.current)
       heatLayerRef.current = null
@@ -142,7 +146,7 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
   }, [orders])
 
   return (
-    <div className="map-container">
+    <div className="map-container" style={{ height: '100%', width: '100%', position: 'absolute', top: 0, left: 0 }}>
       <MapContainer
         center={mapCenter}
         zoom={12}
@@ -150,10 +154,12 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
         zoomControl={true}
         preferCanvas={true}
       >
-        {/* Dark tile layer */}
+        {/* Standard OSM with CSS Dark Mode Inversion (Supports deep zoom up to 19) */}
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>'
-          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+          attribution='&copy; OpenStreetMap'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          className="dark-osm-tiles"
+          maxZoom={19}
         />
 
         <MapUpdater city={city} />
