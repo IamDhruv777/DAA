@@ -117,9 +117,10 @@ def optimize_driver_route(G, driver, orders_list, routing_mode="dynamic", manual
     if sequencing_strategy is None:
         sequencing_strategy = GreedySequencing()
 
-    driver_node = driver.get("current_node")
-    if not driver_node:
+    if "lat" in driver and "lng" in driver:
         driver_node = get_nearest_node(G, driver['lat'], driver['lng'])
+    else:
+        driver_node = driver.get("current_node") or get_nearest_node(G, driver.get('lat', 18.5204), driver.get('lng', 73.8567))
 
     all_nodes = [driver_node]
     pickup_delivery_map = {}
@@ -165,11 +166,25 @@ def optimize_driver_route(G, driver, orders_list, routing_mode="dynamic", manual
             full_route_coords.extend(path)
             total_dist_m += result["total_distance_m"]
         
-        node_type = "pickup" if v in [o["restaurant_node"] for o in orders_list] else "delivery"
+        # Identify which order this stop belongs to
+        matching_order = None
+        node_type = "delivery"
+        for o in orders_list:
+            if v == o.get("restaurant_node") and o.get("status") not in ("picked", "delivering"):
+                node_type = "pickup"
+                matching_order = o.get("order_id")
+                break
+            elif v == o.get("customer_node"):
+                node_type = "delivery"
+                matching_order = o.get("order_id")
+                break
+
         all_stops.append({
             "type": node_type,
             "node": v,
-            "coords": get_node_coords(G, v)
+            "order_id": matching_order,
+            "coords": get_node_coords(G, v),
+            "route_coord_idx": max(0, len(full_route_coords) - 1)
         })
 
     return full_route_coords, all_stops, total_dist_m

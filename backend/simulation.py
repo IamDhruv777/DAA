@@ -260,17 +260,45 @@ class SimulationEngine:
                 driver["lng"] = new_pos[1]
                 driver["stats"]["total_distance_m"] += accumulated_dist
 
-                # Check transition from 'picking' (restaurant) to 'delivering' (customer)
-                if driver["status"] == "picking":
-                    # When halfway or approaching pickup destination, orders become picked
-                    if new_progress >= len(route) // 2:
-                        driver["status"] = "delivering"
-                        for order in self.orders[:self.orders_released]:
-                            if order["order_id"] in driver["current_orders"]:
-                                order["status"] = "picked"
+                # Process stop milestones (restaurant pickups and customer deliveries)
+                for stop in driver.get("stops", []):
+                    stop_idx = stop.get("route_coord_idx", -1)
+                    coords = stop.get("coords")
+                    
+                    # Stop reached either by waypoint index or physical distance <= 75m
+                    dist_to_stop = 999999.0
+                    if coords:
+                        dx = (driver["lat"] - coords[0]) * 111000.0
+                        dy = (driver["lng"] - coords[1]) * 111000.0 * 0.95
+                        dist_to_stop = math.hypot(dx, dy)
+                    
+                    is_at_stop = (stop_idx >= 0 and new_progress >= stop_idx) or (dist_to_stop <= 75.0)
+                    
+                    if is_at_stop:
+                        oid = stop.get("order_id")
+                        if stop.get("type") == "pickup":
+                            for o in self.orders[:self.orders_released]:
+                                if (oid and o["order_id"] == oid) or (not oid and o["order_id"] in driver.get("current_orders", [])):
+                                    if o["status"] in ("pending", "assigned"):
+                                        o["status"] = "picked"
+                        elif stop.get("type") == "delivery":
+                            for o in self.orders[:self.orders_released]:
+                                if (oid and o["order_id"] == oid) or (not oid and o["order_id"] in driver.get("current_orders", [])):
+                                    if o["status"] != "delivered":
+                                        o["status"] = "delivered"
+                                        driver["stats"]["deliveries_completed"] += 1
 
-                # Check if route is now completed
-                if new_progress >= len(route) - 1:
+                # Update driver lifecycle status based on active orders
+                active_orders = [o for o in self.orders[:self.orders_released] if o["order_id"] in driver.get("current_orders", [])]
+                has_unpicked = any(o["status"] in ("pending", "assigned") for o in active_orders)
+                has_undelivered = any(o["status"] != "delivered" for o in active_orders)
+
+                if has_unpicked:
+                    driver["status"] = "picking"
+                elif has_undelivered:
+                    driver["status"] = "delivering"
+                elif active_orders or new_progress >= len(route) - 1:
+                    # All assigned orders are delivered or reached end of route!
                     self._complete_delivery(driver)
 
     def trigger_road_closure(self, num_closures=3):
@@ -345,15 +373,30 @@ class SimulationEngine:
             }
         return new_order
 
-    def recalculate_active_routes(self, reason="Road Obstruction", traffic_level=1.5):
-        """Dynamically re-routes all currently moving drivers from their immediate positions."""
+    def recalculate_active_routes(self, reason="Road Obstruction", traffic_level=1.5, only_affected=False):
+        """Dynamically re-routes active drivers from their immediate positions."""
         from route_optimizer import optimize_driver_route
         from road_network import get_nearest_node
         
         rerouted_drivers = []
         for driver in self.drivers:
-            if driver["status"] in ("picking", "delivering") and driver["current_orders"]:
-                # Update driver's logical node to their physical coordinates so pathing starts correctly
+            if driver["status"] in ("picking", "delivering") and driver.get("current_orders"):
+                # If only_affected is True, check if driver's upcoming path actually intersects a closed road
+                if only_affected and self.closed_roads:
+                    rem_coords = driver.get("route_coords", [])[driver.get("route_progress", 0):]
+                    affected = False
+                    for cr in self.closed_roads:
+                        c_pair = cr.get("coords", [])
+                        if len(c_pair) >= 2:
+                            for rc in rem_coords[:25]:
+                                if math.hypot((rc[0] - c_pair[0][0]) * 111000.0, (rc[1] - c_pair[0][1]) * 111000.0) < 80.0:
+                                    affected = True
+                                    break
+                        if affected:
+                            break
+                    if not affected:
+                        continue
+
                 current_node = get_nearest_node(self.graph, driver["lat"], driver["lng"])
                 driver["current_node"] = current_node
                 
@@ -370,10 +413,13 @@ class SimulationEngine:
                     sequencing_strategy=self.sequencing_strategy
                 )
                 
-                # Apply new dynamically calculated route
-                driver["route_coords"] = route_coords
-                driver["route_progress"] = 0
-                rerouted_drivers.append(driver["driver_id"])
+                # Apply new dynamically calculated route only if valid
+                if route_coords and len(route_coords) > 1:
+                    driver["route_coords"] = route_coords
+                    driver["route_progress"] = 0
+                    driver["stops"] = stops
+                    driver["total_route_distance"] = total_dist
+                    rerouted_drivers.append(driver["driver_id"])
         
         if rerouted_drivers:
             self.last_reroute_event = {
@@ -387,21 +433,22 @@ class SimulationEngine:
     def _complete_delivery(self, driver):
         """Mark a driver's delivery as complete."""
         # Mark orders as delivered
-        for order_id in driver["current_orders"]:
-            for order in self.orders:
+        for order_id in driver.get("current_orders", []):
+            for order in self.orders[:self.orders_released]:
                 if order["order_id"] == order_id:
-                    order["status"] = "delivered"
-                    # Calculate delivery time (simulated)
-                    delivery_time = random.uniform(600, 2400)  # 10-40 minutes
-                    self._delivery_times.append(delivery_time)
+                    if order["status"] != "delivered":
+                        order["status"] = "delivered"
+                        driver["stats"]["deliveries_completed"] += 1
+                        delivery_time = random.uniform(600, 2400)  # 10-40 minutes
+                        self._delivery_times.append(delivery_time)
                     break
 
-        driver["stats"]["deliveries_completed"] += len(driver["current_orders"])
         driver["status"] = "idle"
         driver["active_batch"] = None
         driver["current_orders"] = []
         driver["route_coords"] = []
         driver["route_progress"] = 0
+        driver["stops"] = []
 
     def _update_metrics(self):
         """Compute current simulation metrics."""
@@ -439,9 +486,9 @@ class SimulationEngine:
         # 2. Update traffic (every 5 ticks)
         if self.tick_count % 5 == 0:
             traffic_counts = update_traffic(self.graph)
-            # Recompute active routes dynamically if traffic congestion spikes
-            if self.routing_mode == "dynamic" and self.tick_count % 15 == 0 and traffic_counts.get("high", 0) > 0:
-                self.recalculate_active_routes(reason="Live traffic update & congestion shift", traffic_level=1.4)
+            # Recompute active routes dynamically only if road closures or obstructions directly affect active riders
+            if self.routing_mode == "dynamic" and self.closed_roads:
+                self.recalculate_active_routes(reason="Road Obstruction Encountered", traffic_level=1.4, only_affected=True)
 
         if self.use_cvrptw and self.cvrptw_optimizer:
             self._run_cvrptw()
