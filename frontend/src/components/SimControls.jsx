@@ -1,4 +1,15 @@
-function SimControls({ isRunning, isInitializing, onStart, onStop, onReset, config, onConfigChange }) {
+function SimControls({ 
+  isRunning, 
+  isInitializing, 
+  onStart, 
+  onStop, 
+  onReset, 
+  config, 
+  onConfigChange,
+  onTriggerRoadClosure,
+  onTriggerTrafficSurge,
+  onInjectOrder
+}) {
   return (
     <div className="glass-panel">
       <div className="control-buttons" style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
@@ -15,6 +26,40 @@ function SimControls({ isRunning, isInitializing, onStart, onStop, onReset, conf
           ↺ Reset
         </button>
       </div>
+
+      {isRunning && (
+        <div className="dynamic-events-group" style={{ marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <span className="input-label" style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#a1a1a6' }}>
+            ⚡ Dynamic Re-routing Triggers:
+          </span>
+          <div style={{ display: 'flex', gap: '6px' }}>
+            <button 
+              className="btn btn-secondary" 
+              style={{ flex: 1, fontSize: '11px', padding: '6px 4px', background: 'rgba(255, 69, 58, 0.15)', borderColor: '#ff453a', color: '#ff453a' }}
+              onClick={onTriggerRoadClosure}
+              title="Close roads and force active drivers to re-route via A*"
+            >
+              💥 Roadblock
+            </button>
+            <button 
+              className="btn btn-secondary" 
+              style={{ flex: 1, fontSize: '11px', padding: '6px 4px', background: 'rgba(255, 159, 10, 0.15)', borderColor: '#ff9f0a', color: '#ff9f0a' }}
+              onClick={onTriggerTrafficSurge}
+              title="Spike traffic to trigger congestion-aware re-routing"
+            >
+              🚦 Traffic Spike
+            </button>
+            <button 
+              className="btn btn-secondary" 
+              style={{ flex: 1, fontSize: '11px', padding: '6px 4px', background: 'rgba(0, 122, 255, 0.15)', borderColor: '#0a84ff', color: '#0a84ff' }}
+              onClick={onInjectOrder}
+              title="Inject a new VIP order and recalculate stop sequence"
+            >
+              📦 VIP Order
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="input-group" style={{ marginBottom: '10px' }}>
         <span className="input-label">Drivers</span>

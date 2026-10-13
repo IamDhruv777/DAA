@@ -127,3 +127,22 @@ def simulate_road_closures(G, num_closures=3):
         closed_edges.append((u, v))
         
     return closed_edges
+
+
+def simulate_traffic_surge(G, num_edges=25, factor=2.5):
+    """
+    Simulates sudden acute traffic congestion on key road segments.
+    Multiplies travel time by factor to prompt dynamic re-routing around jams.
+    """
+    edges = list(G.edges(data=True))
+    if not edges:
+        return []
+    
+    surged = random.sample(edges, min(num_edges, len(edges)))
+    for u, v, data in surged:
+        data["traffic_level"] = "high"
+        data["traffic_multiplier"] = factor
+        base_time = data.get("base_travel_time", data.get("travel_time", 12))
+        data["travel_time"] = base_time * factor
+    return [(u, v) for u, v, _ in surged]
+

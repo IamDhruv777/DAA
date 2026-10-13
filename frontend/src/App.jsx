@@ -263,6 +263,51 @@ function App() {
     }
   };
 
+  const triggerDualTrafficSurge = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/simulation/dual/traffic-surge`, { method: 'POST' });
+      return await res.json();
+    } catch (e) {
+      setError('Failed to trigger traffic surge.');
+    }
+  };
+
+  const injectDualOrder = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/simulation/dual/inject-order`, { method: 'POST' });
+      return await res.json();
+    } catch (e) {
+      setError('Failed to inject order.');
+    }
+  };
+
+  const triggerSingleRoadClosure = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/simulation/road-closure`, { method: 'POST' });
+      return await res.json();
+    } catch (e) {
+      setError('Failed to trigger road closure.');
+    }
+  };
+
+  const triggerSingleTrafficSurge = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/simulation/traffic-surge`, { method: 'POST' });
+      return await res.json();
+    } catch (e) {
+      setError('Failed to trigger traffic surge.');
+    }
+  };
+
+  const injectSingleOrder = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/simulation/inject-order`, { method: 'POST' });
+      return await res.json();
+    } catch (e) {
+      setError('Failed to inject order.');
+    }
+  };
+
   const fetchDebugRoute = async () => {
     if (!simState || !simState.orders || simState.orders.length === 0) return;
     setDebugLoading(true);
@@ -296,6 +341,8 @@ function App() {
           onStopDual={stopDualSimulation}
           onResetDual={resetDualSimulation}
           onTriggerRoadClosure={triggerDualRoadClosure}
+          onTriggerTrafficSurge={triggerDualTrafficSurge}
+          onInjectOrder={injectDualOrder}
           config={simSetupConfig}
           onConfigChange={setSimSetupConfig}
           onSwitchToSingleView={() => setViewMode('single')}
@@ -314,6 +361,9 @@ function App() {
           onReset={resetSimulation}
           onCompare={fetchDebugRoute}
           onSwitchToDualView={() => setViewMode('dual')}
+          onTriggerRoadClosure={triggerSingleRoadClosure}
+          onTriggerTrafficSurge={triggerSingleTrafficSurge}
+          onInjectOrder={injectSingleOrder}
         >
           <AlgorithmChart comparisonData={debugRouteData} isLoading={debugLoading} />
         </Dashboard>

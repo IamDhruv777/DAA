@@ -53,6 +53,7 @@ class SimulationEngine:
 
         self.tick_delay = 2.0  # Default 2 seconds
         self.closed_roads = []  # List of {nodes: [u, v], coords: [c1, c2]}
+        self.last_reroute_event = None  # Live dynamic re-routing notification
         
         # New Routing Configuration
         self.routing_mode = "dynamic" # "dynamic" or "manual"
@@ -64,6 +65,7 @@ class SimulationEngine:
         self.graph = load_graph(city_name)
         self.tick_delay = tick_delay
         self.closed_roads = []
+        self.last_reroute_event = None
 
         print(f"[SIM] Generating {num_orders} orders...")
         self.orders = generate_orders(self.graph, num_orders=num_orders, city_name=city_name)
@@ -254,17 +256,70 @@ class SimulationEngine:
                 "coords": [c1, c2]
             })
         
-        # Log the incident in metrics or print
         print(f"[Simulation] Dynamic Event: {len(closures)} roads closed! Re-routing active drivers...")
-        
-        self.recalculate_active_routes()
+        self.recalculate_active_routes(reason=f"{len(closures)} Road closures detected", traffic_level=1.8)
         return closures
 
-    def recalculate_active_routes(self):
+    def trigger_traffic_surge(self, num_edges=25):
+        """Simulates acute traffic surge on key road corridors and re-routes active drivers."""
+        from traffic import simulate_traffic_surge
+        surged = simulate_traffic_surge(self.graph, num_edges=num_edges, factor=2.8)
+        print(f"[Simulation] Dynamic Event: Traffic surge on {len(surged)} roads! Re-routing...")
+        self.recalculate_active_routes(reason="Acute traffic surge on road corridor", traffic_level=2.2)
+        return surged
+
+    def inject_order(self, order_data=None):
+        """Dynamically injects a new high-priority order and re-evaluates delivery sequence."""
+        import random
+        from road_network import get_node_coords
+        
+        nodes = list(self.graph.nodes())
+        p_node = random.choice(nodes)
+        d_node = random.choice(nodes)
+        p_coords = get_node_coords(self.graph, p_node)
+        d_coords = get_node_coords(self.graph, d_node)
+        order_id = f"VIP-{int(time.time() % 10000)}"
+        
+        new_order = {
+            "order_id": order_id,
+            "restaurant_node": p_node,
+            "restaurant_lat": p_coords[0],
+            "restaurant_lng": p_coords[1],
+            "customer_node": d_node,
+            "customer_lat": d_coords[0],
+            "customer_lng": d_coords[1],
+            "status": "pending",
+            "is_priority": True
+        }
+        
+        # Insert immediately into active released pool
+        self.orders.insert(self.orders_released, new_order)
+        self.orders_released += 1
+        
+        # Run batching and assignment for pending orders
+        self._run_batching()
+        self._assign_drivers()
+        self._compute_routes()
+        
+        # Recalculate routes if any active driver was reassigned
+        self.recalculate_active_routes(reason=f"New Priority Order {order_id} arrived", traffic_level=1.2)
+        
+        if not self.last_reroute_event or self.last_reroute_event.get("reason") != f"New Priority Order {order_id} arrived":
+            self.last_reroute_event = {
+                "id": f"reroute-{int(time.time() * 1000)}",
+                "timestamp": time.time(),
+                "reason": f"New VIP Order {order_id} Arrived",
+                "message": f"📦 Dynamic Re-Route: New Priority Order {order_id} arrived! Evaluated sequence & dispatch.",
+                "drivers": []
+            }
+        return new_order
+
+    def recalculate_active_routes(self, reason="Road Obstruction", traffic_level=1.5):
         """Dynamically re-routes all currently moving drivers from their immediate positions."""
         from route_optimizer import optimize_driver_route
         from road_network import get_nearest_node
         
+        rerouted_drivers = []
         for driver in self.drivers:
             if driver["status"] in ("picking", "delivering") and driver["current_orders"]:
                 # Update driver's logical node to their physical coordinates so pathing starts correctly
@@ -273,20 +328,30 @@ class SimulationEngine:
                 
                 # Fetch pending orders for this driver
                 driver_orders = [o for o in self.orders[:self.orders_released] if o["order_id"] in driver["current_orders"]]
+                if not driver_orders:
+                    continue
                 
-                # We skip deliveries already made by filtering orders that are fully completed, 
-                # but our basic loop assumes if it's in current_orders it's not delivered yet.
                 route_coords, stops, total_dist = optimize_driver_route(
                     self.graph, driver, driver_orders,
                     routing_mode=self.routing_mode,
                     manual_algorithm=self.manual_algorithm,
-                    traffic_level=1.5, # Assume incident causes general traffic spike
+                    traffic_level=traffic_level,
                     sequencing_strategy=self.sequencing_strategy
                 )
                 
                 # Apply new dynamically calculated route
                 driver["route_coords"] = route_coords
                 driver["route_progress"] = 0
+                rerouted_drivers.append(driver["driver_id"])
+        
+        if rerouted_drivers:
+            self.last_reroute_event = {
+                "id": f"reroute-{int(time.time() * 1000)}",
+                "timestamp": time.time(),
+                "reason": reason,
+                "message": f"⚠️ Dynamic Re-Route ({reason}): Recalculated paths for {len(rerouted_drivers)} active rider(s) using dynamic A* navigation.",
+                "drivers": rerouted_drivers
+            }
 
     def _complete_delivery(self, driver):
         """Mark a driver's delivery as complete."""
@@ -342,7 +407,10 @@ class SimulationEngine:
 
         # 2. Update traffic (every 5 ticks)
         if self.tick_count % 5 == 0:
-            update_traffic(self.graph)
+            traffic_counts = update_traffic(self.graph)
+            # Recompute active routes dynamically if traffic congestion spikes
+            if self.routing_mode == "dynamic" and self.tick_count % 15 == 0 and traffic_counts.get("high", 0) > 0:
+                self.recalculate_active_routes(reason="Live traffic update & congestion shift", traffic_level=1.4)
 
         if self.use_cvrptw and self.cvrptw_optimizer:
             self._run_cvrptw()
@@ -394,6 +462,7 @@ class SimulationEngine:
             "drivers": driver_positions,
             "orders": visible_orders[:100],  # Limit for performance
             "closed_roads": self.closed_roads,
+            "reroute_event": self.last_reroute_event,
             "is_running": self.is_running,
             "config": {
                 "routing_mode": self.routing_mode,

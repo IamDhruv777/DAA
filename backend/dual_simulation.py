@@ -105,6 +105,32 @@ class DualSimulationEngine:
         self.baseline.closed_roads = copy.deepcopy(self.optimized.closed_roads)
         return closures
 
+    def trigger_traffic_surge(self, num_edges=25):
+        """Applies traffic congestion surge across key corridors to test dynamic vs static response."""
+        surged = self.optimized.trigger_traffic_surge(num_edges=num_edges)
+        
+        # Apply same traffic penalty to baseline edges (baseline does NOT re-route around congestion)
+        for u, v in surged:
+            if self.baseline.graph.has_edge(u, v):
+                for key in self.baseline.graph[u][v]:
+                    base_time = self.baseline.graph[u][v][key].get("base_travel_time", 12)
+                    self.baseline.graph[u][v][key]["travel_time"] = base_time * 2.8
+                    self.baseline.graph[u][v][key]["traffic_level"] = "high"
+        return surged
+
+    def inject_order(self):
+        """Injects a VIP order into both simulations."""
+        opt_order = self.optimized.inject_order()
+        
+        # Add to baseline as well so both simulations process the same workload
+        base_order = copy.deepcopy(opt_order)
+        self.baseline.orders.insert(self.baseline.orders_released, base_order)
+        self.baseline.orders_released += 1
+        self.baseline._run_batching()
+        self.baseline._assign_drivers()
+        self.baseline._compute_routes()
+        return opt_order
+
     def get_state(self):
         """Calculates live comparative metrics and deltas for the dashboard."""
         base_state = self.baseline.get_state()
@@ -126,6 +152,7 @@ class DualSimulationEngine:
             "is_running": self.is_running,
             "baseline": base_state,
             "optimized": opt_state,
+            "reroute_event": self.optimized.last_reroute_event,
             "delta": {
                 "dist_saved_km": dist_saved_km,
                 "dist_saved_pct": dist_saved_pct,

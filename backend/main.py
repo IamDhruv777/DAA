@@ -295,40 +295,50 @@ async def trigger_road_closure():
         "message": f"Closed {len(closures)} roads. Active drivers re-routing."
     }
 
+
+@app.post("/api/simulation/traffic-surge")
+async def trigger_traffic_surge():
+    """Trigger acute traffic surge to prompt dynamic re-routing."""
+    if not simulation.is_running:
+        return {"status": "error", "message": "Simulation is not running."}
+    surged = simulation.trigger_traffic_surge(num_edges=20)
+    return {
+        "status": "success",
+        "surged_count": len(surged),
+        "message": f"Traffic surged on {len(surged)} roads. Active drivers re-routing."
+    }
+
+
+@app.post("/api/simulation/dual/traffic-surge")
+async def trigger_dual_traffic_surge():
+    """Trigger acute traffic surge on both simulations."""
+    if not dual_simulation.is_running:
+        return {"status": "error", "message": "Dual simulation is not running."}
+    surged = dual_simulation.trigger_traffic_surge(num_edges=20)
+    return {
+        "status": "success",
+        "surged_count": len(surged),
+        "message": f"Traffic surged on {len(surged)} roads across both simulations."
+    }
+
+
 @app.post("/api/simulation/inject-order")
-async def inject_order(data: dict):
+async def inject_order(data: dict = None):
     """Dynamically inject a new high-priority order mid-simulation."""
     if not simulation.is_running:
         return {"status": "error", "message": "Simulation is not running."}
-        
-    order_id = f"VIP-{int(time.time())}"
-    # Use real nodes if provided, else default to some known random nodes
-    # Assuming Pune graph: we just pick two random nodes
-    import random
-    nodes = list(simulation.graph.nodes())
-    p_node = random.choice(nodes)
-    d_node = random.choice(nodes)
-    
-    from road_network import get_node_coords
-    p_coords = get_node_coords(simulation.graph, p_node)
-    d_coords = get_node_coords(simulation.graph, d_node)
-    
-    new_order = {
-        "order_id": order_id,
-        "restaurant_node": p_node,
-        "restaurant_lat": p_coords[0],
-        "restaurant_lng": p_coords[1],
-        "customer_node": d_node,
-        "customer_lat": d_coords[0],
-        "customer_lng": d_coords[1],
-        "status": "pending",
-        "is_priority": True
-    }
-    
-    simulation.orders.insert(simulation.orders_released, new_order)
-    simulation.orders_released += 1
-    
-    return {"status": "success", "order_id": order_id, "message": "VIP Order injected."}
+    order = simulation.inject_order(data)
+    return {"status": "success", "order_id": order["order_id"], "message": f"Priority Order {order['order_id']} injected."}
+
+
+@app.post("/api/simulation/dual/inject-order")
+async def inject_dual_order():
+    """Dynamically inject a new order into dual simulation."""
+    if not dual_simulation.is_running:
+        return {"status": "error", "message": "Dual simulation is not running."}
+    order = dual_simulation.inject_order()
+    return {"status": "success", "order_id": order["order_id"], "message": f"Priority Order {order['order_id']} injected across both simulations."}
+
 
 
 @app.post("/api/simulation/config")

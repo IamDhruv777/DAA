@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import MapView from './MapView';
 import MetricsPanel from './MetricsPanel';
 import AlgorithmSelector from './AlgorithmSelector';
@@ -19,10 +19,22 @@ function Dashboard({
   onReset,
   onCompare,
   onSwitchToDualView,
+  onTriggerRoadClosure,
+  onTriggerTrafficSurge,
+  onInjectOrder,
   children,
 }) {
   const [showHeatmap, setShowHeatmap] = useState(false);
   const [darkMode, setDarkMode] = useState(true);
+  const [activeBannerMessage, setActiveBannerMessage] = useState(null);
+
+  useEffect(() => {
+    if (simState?.reroute_event?.message) {
+      setActiveBannerMessage(simState.reroute_event.message);
+      const timer = setTimeout(() => setActiveBannerMessage(null), 6000);
+      return () => clearTimeout(timer);
+    }
+  }, [simState?.reroute_event?.id]);
 
   return (
     <div className={`app ${darkMode ? 'dark' : 'light'}`}>
@@ -93,7 +105,31 @@ function Dashboard({
       </header>
 
       <main className="app-main">
-        <section className="map-container">
+        <section className="map-container" style={{ position: 'relative' }}>
+          {activeBannerMessage && (
+            <div style={{
+              position: 'absolute',
+              top: '12px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              zIndex: 1000,
+              background: 'rgba(20, 20, 20, 0.92)',
+              border: '1px solid #ff9f0a',
+              borderRadius: '8px',
+              padding: '10px 20px',
+              color: '#ffffff',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              fontSize: '13px',
+              fontWeight: 600,
+              backdropFilter: 'blur(10px)',
+              animation: 'fadeIn 0.3s ease'
+            }}>
+              <span>{activeBannerMessage}</span>
+            </div>
+          )}
           <MapView
             drivers={simState?.drivers || []}
             orders={simState?.orders || []}
@@ -116,6 +152,9 @@ function Dashboard({
               onReset={onReset}
               config={simSetupConfig}
               onConfigChange={setSimSetupConfig}
+              onTriggerRoadClosure={onTriggerRoadClosure}
+              onTriggerTrafficSurge={onTriggerTrafficSurge}
+              onInjectOrder={onInjectOrder}
             />
           </div>
 

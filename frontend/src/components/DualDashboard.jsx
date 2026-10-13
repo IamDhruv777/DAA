@@ -10,12 +10,26 @@ function DualDashboard({
   onStopDual,
   onResetDual,
   onTriggerRoadClosure,
+  onTriggerTrafficSurge,
+  onInjectOrder,
   config,
   onConfigChange,
   onSwitchToSingleView
 }) {
   const [closureLoading, setClosureLoading] = useState(false);
-  const [closureMessage, setClosureMessage] = useState(null);
+  const [trafficLoading, setTrafficLoading] = useState(false);
+  const [orderLoading, setOrderLoading] = useState(false);
+  const [activeBannerMessage, setActiveBannerMessage] = useState(null);
+
+  // Auto-listen to dynamic re-route events from backend WebSocket
+  React.useEffect(() => {
+    const event = dualState?.reroute_event || dualState?.optimized?.reroute_event;
+    if (event && event.message) {
+      setActiveBannerMessage(event.message);
+      const timer = setTimeout(() => setActiveBannerMessage(null), 6000);
+      return () => clearTimeout(timer);
+    }
+  }, [dualState?.reroute_event?.id, dualState?.optimized?.reroute_event?.id]);
 
   const baseline = dualState?.baseline || {};
   const optimized = dualState?.optimized || {};
@@ -31,17 +45,46 @@ function DualDashboard({
 
   const handleClosureClick = async () => {
     setClosureLoading(true);
-    setClosureMessage(null);
     try {
       const res = await onTriggerRoadClosure();
       if (res && res.message) {
-        setClosureMessage(res.message);
-        setTimeout(() => setClosureMessage(null), 6000);
+        setActiveBannerMessage(res.message);
+        setTimeout(() => setActiveBannerMessage(null), 6000);
       }
     } catch (e) {
       console.error(e);
     } finally {
       setClosureLoading(false);
+    }
+  };
+
+  const handleTrafficClick = async () => {
+    setTrafficLoading(true);
+    try {
+      const res = await onTriggerTrafficSurge();
+      if (res && res.message) {
+        setActiveBannerMessage(res.message);
+        setTimeout(() => setActiveBannerMessage(null), 6000);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setTrafficLoading(false);
+    }
+  };
+
+  const handleOrderClick = async () => {
+    setOrderLoading(true);
+    try {
+      const res = await onInjectOrder();
+      if (res && res.message) {
+        setActiveBannerMessage(res.message);
+        setTimeout(() => setActiveBannerMessage(null), 6000);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setOrderLoading(false);
     }
   };
 
@@ -120,6 +163,26 @@ function DualDashboard({
             {closureLoading ? '💥 Closing...' : '💥 Block Roads'}
           </button>
 
+          <button 
+            className="btn btn-closure" 
+            onClick={handleTrafficClick}
+            disabled={!isDualRunning || trafficLoading}
+            style={{ background: 'rgba(255, 159, 10, 0.2)', borderColor: '#ff9f0a', color: '#ff9f0a' }}
+            title="Spike traffic congestion to prompt real-time detour calculation"
+          >
+            {trafficLoading ? '🚦 Spiking...' : '🚦 Traffic Spike'}
+          </button>
+
+          <button 
+            className="btn btn-closure" 
+            onClick={handleOrderClick}
+            disabled={!isDualRunning || orderLoading}
+            style={{ background: 'rgba(0, 122, 255, 0.2)', borderColor: '#0a84ff', color: '#0a84ff' }}
+            title="Inject a high-priority order mid-simulation to re-evaluate delivery sequence"
+          >
+            {orderLoading ? '📦 Injecting...' : '📦 VIP Order'}
+          </button>
+
           <button className="btn btn-switch" onClick={onSwitchToSingleView}>
             🚴 Single View
           </button>
@@ -177,11 +240,11 @@ function DualDashboard({
         </div>
       </div>
 
-      {/* Road Closure Incident Banner */}
-      {closureMessage && (
+      {/* Dynamic Re-Route Incident Banner */}
+      {activeBannerMessage && (
         <div className="closure-alert-banner">
-          <span>⚠️ {closureMessage}</span>
-          <span className="alert-sub">Observe: Right map recalculates with A* around the block; Left map experiences delay!</span>
+          <span>{activeBannerMessage}</span>
+          <span className="alert-sub">Observe: Right map (SmartRoute) recomputes via dynamic A*; Left map (Baseline) remains static!</span>
         </div>
       )}
 
