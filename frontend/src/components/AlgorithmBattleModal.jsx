@@ -95,7 +95,8 @@ function AlgorithmBattleModal({ isOpen, onClose }) {
     setLoading(true);
     setError(null);
     try {
-      const url = `/api/algorithms/compare?from_lat=${corridor.from.lat}&from_lng=${corridor.from.lng}&to_lat=${corridor.to.lat}&to_lng=${corridor.to.lng}`;
+      const apiBase = window.location.port === '5173' ? 'http://localhost:8000' : '';
+      const url = `${apiBase}/api/algorithms/compare?from_lat=${corridor.from.lat}&from_lng=${corridor.from.lng}&to_lat=${corridor.to.lat}&to_lng=${corridor.to.lng}`;
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP error ${res.status}`);
       const data = await res.json();
