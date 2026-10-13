@@ -209,10 +209,10 @@ function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          num_orders: 15,
-          num_drivers: 5,
-          city: "Pune, India",
-          tick_delay: 2.0 / simSetupConfig.speed
+          num_orders: simSetupConfig.num_orders || 15,
+          num_drivers: simSetupConfig.num_drivers || 5,
+          city: simSetupConfig.city || "Pune, India",
+          tick_delay: 2.0 / (simSetupConfig.speed || 1)
         })
       });
       const data = await res.json();
@@ -222,7 +222,7 @@ function App() {
         setError(data.message || 'Failed to start dual simulation.');
       }
     } catch (e) {
-      setError('Failed to start dual simulation.');
+      setError('Failed to start dual simulation. Ensure backend is restarted with the latest code.');
     }
   };
 
@@ -241,10 +241,10 @@ function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          num_orders: 15,
-          num_drivers: 5,
-          city: "Pune, India",
-          tick_delay: 2.0 / simSetupConfig.speed
+          num_orders: simSetupConfig.num_orders || 15,
+          num_drivers: simSetupConfig.num_drivers || 5,
+          city: simSetupConfig.city || "Pune, India",
+          tick_delay: 2.0 / (simSetupConfig.speed || 1)
         })
       });
       setIsDualRunning(false);

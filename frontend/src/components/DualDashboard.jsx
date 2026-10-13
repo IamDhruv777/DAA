@@ -126,6 +126,57 @@ function DualDashboard({
         </div>
       </header>
 
+      {/* Parameters & Quick Control Toolbar */}
+      <div className="dual-toolbar">
+        <div className="toolbar-left">
+          <div className="toolbar-item">
+            <span className="toolbar-label">🏍️ Drivers:</span>
+            <input
+              type="number"
+              min="1"
+              max="50"
+              value={config?.num_drivers || 5}
+              disabled={isDualRunning}
+              onChange={(e) => onConfigChange({ ...config, num_drivers: parseInt(e.target.value) || 1 })}
+              className="dual-input"
+            />
+          </div>
+
+          <div className="toolbar-item">
+            <span className="toolbar-label">📦 Orders:</span>
+            <input
+              type="number"
+              min="2"
+              max="200"
+              value={config?.num_orders || 15}
+              disabled={isDualRunning}
+              onChange={(e) => onConfigChange({ ...config, num_orders: parseInt(e.target.value) || 2 })}
+              className="dual-input"
+            />
+          </div>
+
+          <div className="toolbar-item">
+            <span className="toolbar-label">⚡ Speed:</span>
+            <span className="speed-val">{config?.speed || 1}x</span>
+            <input
+              type="range"
+              min="0.5"
+              max="5"
+              step="0.5"
+              value={config?.speed || 1}
+              onChange={(e) => onConfigChange({ ...config, speed: parseFloat(e.target.value) })}
+              className="dual-slider"
+            />
+          </div>
+        </div>
+
+        <div className="toolbar-right">
+          <span className="toolbar-hint">
+            {isDualRunning ? "🚀 Running live comparison. Watch drivers diverge on both maps." : "💡 Set parameters, then click 'Run Dual Test'."}
+          </span>
+        </div>
+      </div>
+
       {/* Road Closure Incident Banner */}
       {closureMessage && (
         <div className="closure-alert-banner">

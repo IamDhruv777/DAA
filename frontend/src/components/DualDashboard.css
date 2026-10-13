@@ -180,6 +180,87 @@
   background: rgba(255, 255, 255, 0.15);
 }
 
+/* Quick Parameters Toolbar */
+.dual-toolbar {
+  height: 42px;
+  background: rgba(20, 20, 20, 0.7);
+  backdrop-filter: blur(15px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  z-index: 90;
+}
+
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.toolbar-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toolbar-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary, #a1a1a6);
+}
+
+.dual-input {
+  width: 58px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  color: #ffffff;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  text-align: center;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.dual-input:focus {
+  border-color: #007aff;
+  box-shadow: 0 0 8px rgba(0, 122, 255, 0.4);
+}
+
+.dual-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.speed-val {
+  font-size: 11px;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  color: #007aff;
+  min-width: 22px;
+}
+
+.dual-slider {
+  width: 80px;
+  accent-color: #007aff;
+  cursor: pointer;
+}
+
+.toolbar-right {
+  display: flex;
+  align-items: center;
+}
+
+.toolbar-hint {
+  font-size: 11px;
+  color: var(--text-muted, #6e6e73);
+  font-style: italic;
+}
+
 /* Closure Alert Banner */
 .closure-alert-banner {
   background: rgba(255, 69, 58, 0.2);
