@@ -652,11 +652,11 @@ body {
 
 /* Butter-Smooth Continuous Driver Movement (Eliminates walking/stopping stutter) */
 .custom-driver-pin {
-  transition: transform var(--move-duration, 1.8s) linear !important;
+  transition: transform var(--move-duration, 2s) linear !important;
   will-change: transform;
 }
 .leaflet-marker-icon.custom-driver-pin {
-  transition: transform var(--move-duration, 1.8s) linear !important;
+  transition: transform var(--move-duration, 2s) linear !important;
   will-change: transform;
 }
 

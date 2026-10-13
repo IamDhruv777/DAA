@@ -22,14 +22,14 @@ const CITY_COORDS = {
   "Bangalore, India": [12.9716, 77.5946]
 }
 
-// Premium Status Colors (Accessible Palette)
+// Premium Status Colors (Accessible Navigation Palette)
 const STATUS_COLORS = {
-  idle: '#34c759',      // Apple Green
-  picking: '#ffcc00',   // Apple Yellow
-  delivering: '#ff3b30', // Apple Red
-  returning: '#007aff',  // Apple Blue
-  restaurant: '#ff9500', // Apple Orange
-  customer: '#af52de',   // Apple Purple
+  idle: '#34c759',        // Apple Green
+  picking: '#ff9500',     // Warm Amber (Restaurant Pickup path)
+  delivering: '#0a84ff',  // Electric Blue (Customer Delivery path)
+  returning: '#30d158',   // Emerald Green
+  restaurant: '#ff9500',  // Apple Orange
+  customer: '#af52de',    // Apple Purple
 }
 
 // Custom driver icon creator (Miniature Delivery Motorbike)
@@ -227,15 +227,22 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
   const customerIcon = useMemo(() => createCustomerIcon(), [])
   const roadblockIcon = useMemo(() => createRoadblockIcon(), [])
 
-  // Route polylines from active drivers
+  // Forward route polylines starting precisely at current rider coordinates
   const routes = useMemo(() => {
     return drivers
-      .filter(d => d.route_coords && d.route_coords.length > 1)
-      .map(d => ({
-        id: d.driver_id,
-        coords: d.route_coords.map(c => [c[0], c[1]]),
-        status: d.status,
-      }))
+      .filter(d => d.status !== 'idle' && d.route_coords && d.route_coords.length > 0)
+      .map(d => {
+        const coords = d.route_coords.map(c => [c[0], c[1]])
+        // Ensure path connects directly to rider's current bike position
+        if (coords.length > 0 && (Math.abs(coords[0][0] - d.lat) > 0.00005 || Math.abs(coords[0][1] - d.lng) > 0.00005)) {
+          coords.unshift([d.lat, d.lng])
+        }
+        return {
+          id: d.driver_id,
+          coords: coords,
+          status: d.status,
+        }
+      })
   }, [drivers])
 
   // Heatmap data: all restaurant and customer locations
@@ -259,7 +266,7 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
         position: 'absolute', 
         top: 0, 
         left: 0,
-        '--move-duration': `${(1.9 / (speed || 1)).toFixed(2)}s`
+        '--move-duration': `${(2.0 / Math.max(0.2, speed || 1)).toFixed(2)}s`
       }}
     >
       <MapContainer

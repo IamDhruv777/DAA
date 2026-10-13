@@ -59,6 +59,11 @@ class GreedySequencing(SequencingAlgorithm):
         pending_deliveries = set()
         remaining_pickups = set(pickup_delivery_map.keys())
         
+        # Add deliveries that have NO preceding pickup constraint (e.g. already picked orders)
+        all_constrained = set(pickup_delivery_map.keys()).union(set(pickup_delivery_map.values()))
+        unconstrained_deliveries = set(range(1, n)) - all_constrained
+        pending_deliveries.update(unconstrained_deliveries)
+        
         if start_idx in remaining_pickups:
             remaining_pickups.remove(start_idx)
             pending_deliveries.add(pickup_delivery_map[start_idx])
@@ -75,7 +80,13 @@ class GreedySequencing(SequencingAlgorithm):
                     best_dist = dist_matrix[curr][next_stop]
                     best_next = next_stop
             
-            if best_next == -1: break
+            if best_next == -1:
+                # Visit any remaining unvisited nodes
+                unvisited = [i for i in range(1, n) if not visited[i]]
+                if unvisited:
+                    best_next = min(unvisited, key=lambda i: dist_matrix[curr][i])
+                else:
+                    break
             
             route.append(best_next)
             visited[best_next] = True
@@ -117,11 +128,20 @@ def optimize_driver_route(G, driver, orders_list, routing_mode="dynamic", manual
         p_node = order["restaurant_node"]
         d_node = order["customer_node"]
         
-        p_idx = len(all_nodes)
-        all_nodes.append(p_node)
-        d_idx = len(all_nodes)
-        all_nodes.append(d_node)
-        pickup_delivery_map[p_idx] = d_idx
+        # If order is already picked up, driver already has the food!
+        # Do NOT route back to the restaurant; route straight to customer!
+        if order.get("status") in ("picked", "delivering"):
+            d_idx = len(all_nodes)
+            all_nodes.append(d_node)
+        else:
+            p_idx = len(all_nodes)
+            all_nodes.append(p_node)
+            d_idx = len(all_nodes)
+            all_nodes.append(d_node)
+            pickup_delivery_map[p_idx] = d_idx
+
+    if len(all_nodes) <= 1:
+        return [], [], 0
 
     dist_matrix = _build_distance_matrix(G, all_nodes)
 

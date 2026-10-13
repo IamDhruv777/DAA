@@ -176,13 +176,19 @@ class SimulationEngine:
                     driver["route_coords"] = route_coords
                     driver["route_progress"] = 0
                     driver["total_route_distance"] = total_dist
+                    driver["stops"] = stops
 
-                    # Mark orders as picked
-                    for order in driver_orders:
-                        order["status"] = "picked"
-
-                    if route_coords:
+                    # If route contains pickup stops, driver starts in 'picking' mode
+                    has_pickups = any(s.get("type") == "pickup" for s in stops)
+                    if has_pickups:
+                        driver["status"] = "picking"
+                        for order in driver_orders:
+                            if order.get("status") == "pending":
+                                order["status"] = "assigned"
+                    elif route_coords:
                         driver["status"] = "delivering"
+                        for order in driver_orders:
+                            order["status"] = "picked"
 
     def _move_drivers(self):
         """Advance drivers along their routes based on vehicle speed."""
@@ -226,8 +232,6 @@ class SimulationEngine:
                     segment_dist = math.sqrt(dx ** 2 + dy ** 2) * 111000 # Approx meters
                     
                     if accumulated_dist + segment_dist > dist_to_move:
-                        # Partial movement if we wanted to be extremely precise, 
-                        # but advancing to the next node is enough for this simulation scale
                         break
                     
                     accumulated_dist += segment_dist
@@ -241,6 +245,15 @@ class SimulationEngine:
                 driver["lat"] = new_pos[0]
                 driver["lng"] = new_pos[1]
                 driver["stats"]["total_distance_m"] += accumulated_dist
+
+                # Check transition from 'picking' (restaurant) to 'delivering' (customer)
+                if driver["status"] == "picking":
+                    # When halfway or approaching pickup destination, orders become picked
+                    if new_progress >= len(route) // 2:
+                        driver["status"] = "delivering"
+                        for order in self.orders[:self.orders_released]:
+                            if order["order_id"] in driver["current_orders"]:
+                                order["status"] = "picked"
 
     def trigger_road_closure(self, num_closures=3):
         """Simulates unexpected road closures and forces active drivers to re-route."""
@@ -432,12 +445,22 @@ class SimulationEngine:
         """Get current simulation state for WebSocket broadcast."""
         driver_positions = []
         for d in self.drivers:
+            progress = d.get("route_progress", 0)
+            raw_coords = d.get("route_coords", [])
+            
+            # Send the clean forward path from current position to customer (no stale tail)
+            if raw_coords and progress < len(raw_coords) and d.get("status") != "idle":
+                # Start at current rider position, then include all remaining forward waypoints to customer
+                forward_coords = [[d["lat"], d["lng"]]] + raw_coords[progress + 1:]
+            else:
+                forward_coords = []
+
             driver_positions.append({
                 "driver_id": d["driver_id"],
                 "lat": d["lat"],
                 "lng": d["lng"],
                 "status": d["status"],
-                "route_coords": d["route_coords"][:50] if d["route_coords"] else [],
+                "route_coords": forward_coords,
                 "progress": d["route_progress"],
                 "active_batch": d["active_batch"],
                 "deliveries": d["stats"]["deliveries_completed"],
