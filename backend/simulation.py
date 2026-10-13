@@ -51,7 +51,7 @@ class SimulationEngine:
         self.cvrptw_optimizer = ORToolsCVRPTW(time_limit_sec=1, max_capacity=3) if ORTOOLS_AVAILABLE else None
         self.use_cvrptw = False  # Toggleable via UI / API
 
-        self.tick_delay = 2.0  # Default 2 seconds
+        self.tick_delay = 0.8  # Fast smooth 800ms ticks
         self.closed_roads = []  # List of {nodes: [u, v], coords: [c1, c2]}
         self.last_reroute_event = None  # Live dynamic re-routing notification
         
@@ -59,7 +59,7 @@ class SimulationEngine:
         self.routing_mode = "dynamic" # "dynamic" or "manual"
         self.manual_algorithm = "dijkstra" # "dijkstra", "astar", "bfs", "dfs", "greedy"
 
-    def initialize(self, num_orders=1000, num_drivers=50, city_name="Pune, India", tick_delay=2.0):
+    def initialize(self, num_orders=1000, num_drivers=50, city_name="Pune, India", tick_delay=0.8):
         """Load graph, generate orders and drivers."""
         print(f"[SIM] Initializing simulation for {city_name} with {num_drivers} drivers and {num_orders} orders...")
         self.graph = load_graph(city_name)
@@ -222,7 +222,8 @@ class SimulationEngine:
                 # Move along the coordinate list based on distance
                 accumulated_dist = 0
                 new_progress = progress
-                
+                interp_pos = None
+
                 while accumulated_dist < dist_to_move and new_progress < len(route) - 1:
                     p1 = route[new_progress]
                     p2 = route[new_progress + 1]
@@ -230,20 +231,29 @@ class SimulationEngine:
                     dx = (p2[0] - p1[0])
                     dy = (p2[1] - p1[1])
                     segment_dist = math.sqrt(dx ** 2 + dy ** 2) * 111000 # Approx meters
-                    
+
                     if accumulated_dist + segment_dist > dist_to_move:
+                        # Smoothly interpolate position between p1 and p2
+                        rem = dist_to_move - accumulated_dist
+                        ratio = max(0.0, min(1.0, rem / max(0.001, segment_dist)))
+                        interp_pos = [
+                            p1[0] + (p2[0] - p1[0]) * ratio,
+                            p1[1] + (p2[1] - p1[1]) * ratio
+                        ]
+                        accumulated_dist += rem
                         break
-                    
+
                     accumulated_dist += segment_dist
                     new_progress += 1
-                
-                if new_progress == progress and progress < len(route) - 1:
-                    new_progress += 1 # Ensure at least 1 node progress
 
                 driver["route_progress"] = new_progress
-                new_pos = route[new_progress]
-                driver["lat"] = new_pos[0]
-                driver["lng"] = new_pos[1]
+                if interp_pos:
+                    driver["lat"] = interp_pos[0]
+                    driver["lng"] = interp_pos[1]
+                else:
+                    new_pos = route[new_progress]
+                    driver["lat"] = new_pos[0]
+                    driver["lng"] = new_pos[1]
                 driver["stats"]["total_distance_m"] += accumulated_dist
 
                 # Check transition from 'picking' (restaurant) to 'delivering' (customer)

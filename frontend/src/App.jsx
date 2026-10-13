@@ -126,7 +126,7 @@ function App() {
       
       const configWithDelay = {
         ...simSetupConfig,
-        tick_delay: 2.0 / simSetupConfig.speed
+        tick_delay: 0.8 / (simSetupConfig.speed || 1)
       };
 
       const res = await fetch(`${API_URL}/api/simulation/start`, {
@@ -155,7 +155,7 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...simSetupConfig,
-          tick_delay: 2.0 / simSetupConfig.speed
+          tick_delay: 0.8 / (simSetupConfig.speed || 1)
         })
       });
       setIsRunning(false);
@@ -184,7 +184,7 @@ function App() {
       
       const backendConfig = {
         ...updatedConfig,
-        tick_delay: 2.0 / updatedConfig.speed
+        tick_delay: 0.8 / (updatedConfig.speed || 1)
       };
 
       await fetch(`${API_URL}/api/simulation/config`, {
@@ -212,7 +212,7 @@ function App() {
           num_orders: simSetupConfig.num_orders || 15,
           num_drivers: simSetupConfig.num_drivers || 5,
           city: simSetupConfig.city || "Pune, India",
-          tick_delay: 2.0 / (simSetupConfig.speed || 1)
+          tick_delay: 0.8 / (simSetupConfig.speed || 1)
         })
       });
       const data = await res.json();
@@ -244,7 +244,7 @@ function App() {
           num_orders: simSetupConfig.num_orders || 15,
           num_drivers: simSetupConfig.num_drivers || 5,
           city: simSetupConfig.city || "Pune, India",
-          tick_delay: 2.0 / (simSetupConfig.speed || 1)
+          tick_delay: 0.8 / (simSetupConfig.speed || 1)
         })
       });
       setIsDualRunning(false);

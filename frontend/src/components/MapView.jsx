@@ -266,7 +266,7 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
         position: 'absolute', 
         top: 0, 
         left: 0,
-        '--move-duration': `${(2.0 / Math.max(0.2, speed || 1)).toFixed(2)}s`
+        '--move-duration': `${(0.8 / Math.max(0.2, speed || 1)).toFixed(2)}s`
       }}
     >
       <MapContainer

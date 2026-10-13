@@ -233,7 +233,7 @@ async def start_dual_simulation(config: SimStartConfig = None):
     orders = config.num_orders if config else 15
     drivers = config.num_drivers if config else 5
     city = config.city if config else "Pune, India"
-    delay = config.tick_delay if config else 2.0
+    delay = config.tick_delay if config else 0.8
 
     dual_simulation.initialize(num_orders=orders, num_drivers=drivers, city_name=city, tick_delay=delay)
     sim_task = asyncio.create_task(dual_simulation.run(ws_broadcast_callback=broadcast_state))
@@ -264,7 +264,7 @@ async def reset_dual_simulation(config: SimStartConfig = None):
     orders = config.num_orders if config else 15
     drivers = config.num_drivers if config else 5
     city = config.city if config else "Pune, India"
-    delay = config.tick_delay if config else 2.0
+    delay = config.tick_delay if config else 0.8
     dual_simulation.initialize(num_orders=orders, num_drivers=drivers, city_name=city, tick_delay=delay)
     return {"status": "reset", "mode": "dual"}
 
