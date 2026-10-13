@@ -33,18 +33,41 @@ const STATUS_COLORS = {
   customer: '#af52de',    // Apple Purple
 }
 
-// Custom driver icon creator (Miniature Delivery Motorbike)
-function createDriverIcon(status) {
-  const color = STATUS_COLORS[status] || '#94a3b8'
+// Distinct shades of orange/amber so each driver's path & bike is clearly recognizable
+const DRIVER_ORANGE_PALETTE = [
+  '#ff4500', // Fiery Red-Orange
+  '#ff6d00', // Bright Blaze Orange
+  '#ff8500', // Vibrant Sunset Orange
+  '#ffa200', // Amber Gold Orange
+  '#ff5400', // Electric Coral Orange
+  '#f77f00', // Rich Sunburst Orange
+  '#ffb703', // Warm Marigold Orange
+  '#fb5607', // Neon Persimmon Orange
+  '#e85d04', // Deep Blood Orange
+  '#faa307', // Radiant Apricot Orange
+  '#f48c06', // Tangerine Glow
+  '#dc2f02', // Spiced Rust Orange
+]
+
+function getDriverOrangeShade(driverId, index = 0) {
+  const numMatch = String(driverId).match(/\d+/)
+  const idx = numMatch ? parseInt(numMatch[0], 10) : (typeof index === 'number' ? index : 0)
+  return DRIVER_ORANGE_PALETTE[Math.abs(idx) % DRIVER_ORANGE_PALETTE.length]
+}
+
+// Custom driver icon creator (Miniature Delivery Motorbike with Driver-Specific Orange Shades)
+function createDriverIcon(status, customColor) {
+  const color = customColor || (status === 'idle' ? '#34c759' : '#ff9500')
+  const glowId = `bike-glow-${status}-${String(color).replace(/[^a-zA-Z0-9]/g, '')}`
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 34 34">
       <defs>
-        <filter id="bike-glow-${status}" x="-30%" y="-30%" width="160%" height="160%">
-          <feDropShadow dx="0" dy="1.5" stdDeviation="2.5" flood-color="${color}" flood-opacity="0.8"/>
+        <filter id="${glowId}" x="-30%" y="-30%" width="160%" height="160%">
+          <feDropShadow dx="0" dy="1.5" stdDeviation="2.5" flood-color="${color}" flood-opacity="0.85"/>
         </filter>
       </defs>
       <!-- Circular badge background -->
-      <circle cx="17" cy="17" r="14" fill="#0d1117" stroke="${color}" stroke-width="2.2" filter="url(#bike-glow-${status})"/>
+      <circle cx="17" cy="17" r="14" fill="#0d1117" stroke="${color}" stroke-width="2.3" filter="url(#${glowId})"/>
       
       <!-- Miniature Delivery Motorbike & Box -->
       <g fill="${color}">
@@ -245,20 +268,22 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
   const customerIcon = useMemo(() => createCustomerIcon(), [])
   const roadblockIcon = useMemo(() => createRoadblockIcon(), [])
 
-  // Forward route polylines starting precisely at current rider coordinates
+  // Forward route polylines starting precisely at current rider coordinates with individual orange shades
   const routes = useMemo(() => {
     return drivers
       .filter(d => d.status !== 'idle' && d.route_coords && d.route_coords.length > 0)
-      .map(d => {
+      .map((d, idx) => {
         const coords = d.route_coords.map(c => [c[0], c[1]])
         // Ensure path connects directly to rider's current bike position
         if (coords.length > 0 && (Math.abs(coords[0][0] - d.lat) > 0.00005 || Math.abs(coords[0][1] - d.lng) > 0.00005)) {
           coords.unshift([d.lat, d.lng])
         }
+        const orangeColor = getDriverOrangeShade(d.driver_id, idx)
         return {
           id: d.driver_id,
           coords: coords,
           status: d.status,
+          color: orangeColor,
         }
       })
   }, [drivers])
@@ -309,18 +334,18 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
         />
         <HeatmapLayer points={heatmapPoints} visible={showHeatmap} />
 
-        {/* Delivery routes (Smooth Neon Solid Glow — No ugly dotted red line!) */}
+        {/* Delivery routes (Each Driver has a Unique Vibrant Shade of Orange!) */}
         {routes.map(route => {
-          const color = STATUS_COLORS[route.status] || '#0a84ff';
+          const color = route.color || STATUS_COLORS[route.status] || '#ff8500';
           return (
             <div key={`route-group-${route.id}`}>
-              {/* Outer Ambient Glow */}
+              {/* Outer Ambient Glow with Driver-Specific Orange */}
               <Polyline
                 positions={route.coords}
                 pathOptions={{
                   color: color,
-                  weight: 8,
-                  opacity: 0.25,
+                  weight: 9,
+                  opacity: 0.35,
                   lineCap: 'round',
                   lineJoin: 'round',
                 }}
@@ -330,19 +355,19 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
                 positions={route.coords}
                 pathOptions={{
                   color: color,
-                  weight: 3.5,
+                  weight: 4,
                   opacity: 0.95,
                   lineCap: 'round',
                   lineJoin: 'round',
                 }}
               />
-              {/* Center Core Highlight for Apple-Maps Finish */}
+              {/* Center Core Highlight for Apple-Maps Polish */}
               <Polyline
                 positions={route.coords}
                 pathOptions={{
                   color: '#ffffff',
                   weight: 1.2,
-                  opacity: 0.75,
+                  opacity: 0.8,
                   lineCap: 'round',
                   lineJoin: 'round',
                 }}
@@ -351,21 +376,25 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
           )
         })}
 
-        {/* Debug Routing Exploration Overlay (Dijkstra) */}
-        {debugRouteData?.dijkstra?.explored_coords && (
-          <Polyline 
-            positions={debugRouteData.dijkstra.explored_coords.map(c => [c[0], c[1]])} 
-            pathOptions={{ color: '#32d74b', weight: 4, opacity: 0.1 }} 
+        {/* Visual Search Cloud — Dijkstra 360-degree radial exploration cloud */}
+        {debugRouteData?.dijkstra?.explored_coords && debugRouteData.dijkstra.explored_coords.map((c, i) => (
+          <CircleMarker 
+            key={`dijkstra-node-${i}`}
+            center={[c[0], c[1]]} 
+            radius={2}
+            pathOptions={{ color: '#34c759', fillColor: '#34c759', fillOpacity: 0.5, weight: 0 }} 
           />
-        )}
+        ))}
 
-        {/* Debug Routing Exploration Overlay (A*) */}
-        {debugRouteData?.astar?.explored_coords && (
-          <Polyline 
-            positions={debugRouteData.astar.explored_coords.map(c => [c[0], c[1]])} 
-            pathOptions={{ color: '#ff453a', weight: 3, opacity: 0.2 }} 
+        {/* Visual Search Cloud — A* focused directional search cone */}
+        {debugRouteData?.astar?.explored_coords && debugRouteData.astar.explored_coords.map((c, i) => (
+          <CircleMarker 
+            key={`astar-node-${i}`}
+            center={[c[0], c[1]]} 
+            radius={2.5}
+            pathOptions={{ color: '#00f2fe', fillColor: '#00f2fe', fillOpacity: 0.85, weight: 0 }} 
           />
-        )}
+        ))}
 
         {/* Restaurant markers (Storefront Building Pin) */}
         {orders.map(order => (
@@ -401,31 +430,53 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
           </Marker>
         ))}
 
-        {/* Driver markers (Miniature Motorbike) */}
-        {drivers.map(driver => (
-          <Marker
-            key={driver.driver_id}
-            position={[driver.lat, driver.lng]}
-            icon={driverIcons[driver.status] || driverIcons.idle}
-            eventHandlers={{
-              click: () => {
-                setSelectedDriverId(driver.driver_id)
-              }
-            }}
-          >
-            <Popup>
-              <div className="driver-popup">
-                <h4>🏍️ {driver.driver_id}</h4>
-                <span className={`status-tag ${driver.status}`}>{driver.status.toUpperCase()}</span>
-                <p>Deliveries: {driver.deliveries || 0}</p>
-                {driver.active_batch && <p>Batch: {driver.active_batch}</p>}
-                <div style={{ marginTop: '6px', fontSize: '11px', color: '#58a6ff' }}>
-                  ℹ️ Click bike anytime to view Flight Deck HUD
+        {/* Driver markers (Miniature Motorbike with individual orange shades) */}
+        {drivers.map((driver, idx) => {
+          const driverOrange = getDriverOrangeShade(driver.driver_id, idx)
+          const icon = driver.status === 'idle'
+            ? createDriverIcon('idle', '#34c759')
+            : createDriverIcon(driver.status, driverOrange)
+
+          return (
+            <Marker
+              key={driver.driver_id}
+              position={[driver.lat, driver.lng]}
+              icon={icon}
+              eventHandlers={{
+                click: () => {
+                  setSelectedDriverId(driver.driver_id)
+                }
+              }}
+            >
+              <Popup>
+                <div className="driver-popup">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <h4>🏍️ {driver.driver_id}</h4>
+                    <span 
+                      style={{ 
+                        width: '12px', 
+                        height: '12px', 
+                        borderRadius: '50%', 
+                        background: driverOrange, 
+                        display: 'inline-block',
+                        boxShadow: `0 0 8px ${driverOrange}`
+                      }}
+                      title="Driver's individual route color"
+                    ></span>
+                  </div>
+                  <span className={`status-tag ${driver.status}`} style={{ borderColor: driverOrange, color: driverOrange }}>
+                    {driver.status.toUpperCase()}
+                  </span>
+                  <p>Deliveries: {driver.deliveries || 0}</p>
+                  {driver.active_batch && <p>Batch: {driver.active_batch}</p>}
+                  <div style={{ marginTop: '6px', fontSize: '11px', color: '#58a6ff' }}>
+                    ℹ️ Click bike anytime to view Flight Deck HUD
+                  </div>
                 </div>
-              </div>
-            </Popup>
-          </Marker>
-        ))}
+              </Popup>
+            </Marker>
+          )
+        })}
 
         {/* Closed Roads Blockages in Prominent WHITE Color */}
         {closedRoads.map((closure, idx) => (
@@ -489,10 +540,7 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
               <span className="status-dot" style={{ background: STATUS_COLORS.idle, boxShadow: `0 0 10px ${STATUS_COLORS.idle}` }}></span> 🏍️ Idle
             </div>
             <div className="legend-item">
-              <span className="status-dot" style={{ background: STATUS_COLORS.picking, boxShadow: `0 0 10px ${STATUS_COLORS.picking}` }}></span> 🏍️ Picking
-            </div>
-            <div className="legend-item">
-              <span className="status-dot" style={{ background: STATUS_COLORS.delivering, boxShadow: `0 0 10px ${STATUS_COLORS.delivering}` }}></span> 🏍️ Delivering
+              <span className="status-dot" style={{ background: '#ff7b00', boxShadow: '0 0 10px #ff7b00' }}></span> 🏍️ Active (Shades of Orange)
             </div>
           </div>
         </div>

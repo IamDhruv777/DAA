@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import MapView from './MapView';
 import AlgorithmBattleModal from './AlgorithmBattleModal';
+import TSPBattleModal from './TSPBattleModal';
 import './DualDashboard.css';
 
 function DualDashboard({
@@ -22,6 +23,7 @@ function DualDashboard({
   const [orderLoading, setOrderLoading] = useState(false);
   const [activeBannerMessage, setActiveBannerMessage] = useState(null);
   const [showBattleModal, setShowBattleModal] = useState(false);
+  const [showTSPModal, setShowTSPModal] = useState(false);
 
   // Auto-listen to dynamic re-route events from backend WebSocket
   React.useEffect(() => {
@@ -187,6 +189,20 @@ function DualDashboard({
 
           <button 
             className="btn btn-closure" 
+            onClick={() => setShowTSPModal(true)}
+            style={{ 
+              background: 'linear-gradient(135deg, #ff7b00, #ff4500)', 
+              borderColor: '#ff7b00', 
+              color: '#ffffff', 
+              fontWeight: '700' 
+            }}
+            title="Level-2 Delivery Sequencing: Held-Karp Dynamic Programming vs Greedy TSP"
+          >
+            🎒 Multi-Stop TSP
+          </button>
+
+          <button 
+            className="btn btn-closure" 
             onClick={() => setShowBattleModal(true)}
             style={{ 
               background: 'linear-gradient(135deg, #10b981, #06b6d4)', 
@@ -331,6 +347,11 @@ function DualDashboard({
       <AlgorithmBattleModal 
         isOpen={showBattleModal} 
         onClose={() => setShowBattleModal(false)} 
+      />
+
+      <TSPBattleModal 
+        isOpen={showTSPModal} 
+        onClose={() => setShowTSPModal(false)} 
       />
     </div>
   );

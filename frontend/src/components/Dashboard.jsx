@@ -4,6 +4,7 @@ import MetricsPanel from './MetricsPanel';
 import AlgorithmSelector from './AlgorithmSelector';
 import SimControls from './SimControls';
 import AlgorithmBattleModal from './AlgorithmBattleModal';
+import TSPBattleModal from './TSPBattleModal';
 import './Dashboard.css';
 
 function Dashboard({
@@ -29,6 +30,7 @@ function Dashboard({
   const [darkMode, setDarkMode] = useState(true);
   const [activeBannerMessage, setActiveBannerMessage] = useState(null);
   const [showBattleModal, setShowBattleModal] = useState(false);
+  const [showTSPModal, setShowTSPModal] = useState(false);
 
   useEffect(() => {
     if (simState?.reroute_event?.message) {
@@ -50,6 +52,25 @@ function Dashboard({
         </div>
 
         <div className="header-right">
+          <button
+            className="btn btn-dual-toggle"
+            style={{
+              background: 'linear-gradient(135deg, #ff7b00, #ff4500)',
+              border: 'none',
+              color: '#fff',
+              fontWeight: '700',
+              padding: '6px 13px',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontSize: '12px',
+              boxShadow: '0 2px 10px rgba(255, 123, 0, 0.35)'
+            }}
+            onClick={() => setShowTSPModal(true)}
+            title="Level-2 Delivery Sequencing: Held-Karp Dynamic Programming vs Greedy TSP"
+          >
+            🎒 Multi-Stop TSP
+          </button>
+
           <button
             className="btn btn-dual-toggle"
             style={{
@@ -213,6 +234,11 @@ function Dashboard({
       <AlgorithmBattleModal 
         isOpen={showBattleModal} 
         onClose={() => setShowBattleModal(false)} 
+      />
+
+      <TSPBattleModal 
+        isOpen={showTSPModal} 
+        onClose={() => setShowTSPModal(false)} 
       />
     </div>
   );
