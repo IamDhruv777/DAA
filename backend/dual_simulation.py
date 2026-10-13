@@ -31,7 +31,7 @@ class DualSimulationEngine:
         self.baseline.assignment_strategy = GreedyNearestAssignment()
         self.baseline.sequencing_strategy = GreedySequencing()
         self.baseline.routing_mode = "manual"
-        self.baseline.manual_algorithm = "greedy"
+        self.baseline.manual_algorithm = "dijkstra"
         
         # Configure Optimized: Research / Global Combinatorial Algorithms
         self.optimized.batching_strategy = FoodMatchBatching()
@@ -61,6 +61,8 @@ class DualSimulationEngine:
         self.baseline.tick_count = 0
         self.baseline._delivery_times = []
         self.baseline.batches = []
+        self.baseline.routing_mode = "manual"
+        self.baseline.manual_algorithm = "dijkstra"
         
         # Setup Optimized Engine
         self.optimized.graph = master_graph.copy()
@@ -71,6 +73,13 @@ class DualSimulationEngine:
         self.optimized.tick_count = 0
         self.optimized._delivery_times = []
         self.optimized.batches = []
+        self.optimized.routing_mode = "dynamic"
+        self.optimized.manual_algorithm = "astar"
+
+        # Apply initial traffic to both graphs
+        from traffic import update_traffic
+        update_traffic(self.baseline.graph)
+        update_traffic(self.optimized.graph)
 
         print("[DUAL-SIM] Initialization complete. Both engines synchronized.")
 

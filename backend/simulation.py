@@ -187,9 +187,13 @@ class SimulationEngine:
         total_edges = traffic_data.get("total_edges", 0)
         traffic_mult = 1.0
         if total_edges > 0:
-            traffic_mult = (traffic_data.get("low", 0) * 1.0 + 
+            sum_traffic = (traffic_data.get("low", 0) * 1.0 + 
                            traffic_data.get("medium", 0) * 1.3 + 
-                           traffic_data.get("high", 0) * 1.8) / total_edges
+                           traffic_data.get("high", 0) * 1.8)
+            traffic_mult = (sum_traffic / total_edges) if sum_traffic > 0 else 1.0
+        
+        if traffic_mult <= 0.1:
+            traffic_mult = 1.0
         
         # Effective speed in meters per second
         speed_kmh = 40 / traffic_mult
