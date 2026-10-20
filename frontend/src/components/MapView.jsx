@@ -121,7 +121,7 @@ function createRestaurantIcon() {
 }
 
 // Custom customer icon (Miniature Person Avatar)
-function createCustomerIcon() {
+function createCustomerIcon(isPriority = false) {
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 26 26">
       <defs>
@@ -141,9 +141,11 @@ function createCustomerIcon() {
     </svg>
   `
   return L.divIcon({
-    html: svg,
+    html: isPriority
+      ? `<div style="position:relative;width:44px;height:30px">${svg}<span style="position:absolute;left:23px;top:-2px;padding:2px 5px;border:1px solid #fff;border-radius:8px;background:#f59e0b;color:#201300;font:bold 8px Arial,sans-serif;line-height:10px;box-shadow:0 1px 6px #000">VIP</span></div>`
+      : svg,
     className: 'custom-customer-pin',
-    iconSize: [26, 26],
+    iconSize: isPriority ? [44, 30] : [26, 26],
     iconAnchor: [13, 13],
     popupAnchor: [0, -13],
   })
@@ -176,7 +178,7 @@ function createRoadblockIcon() {
 }
 
 // Custom Delivery Destination Icon (Crisp Red Small Dot with animated pulse indicating drop-off location)
-function createDeliveryDestinationIcon() {
+function createDeliveryDestinationIcon(isPriority = false) {
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 30 30">
       <defs>
@@ -194,9 +196,11 @@ function createDeliveryDestinationIcon() {
     </svg>
   `
   return L.divIcon({
-    html: svg,
+    html: isPriority
+      ? `<div style="position:relative;width:44px;height:34px">${svg}<span style="position:absolute;right:-3px;top:-2px;padding:2px 5px;border:1px solid #fff;border-radius:8px;background:#f59e0b;color:#201300;font:bold 8px Arial,sans-serif;line-height:10px;box-shadow:0 1px 6px #000">VIP</span></div>`
+      : svg,
     className: 'custom-delivery-dot',
-    iconSize: [30, 30],
+    iconSize: isPriority ? [44, 34] : [30, 30],
     iconAnchor: [15, 15],
     popupAnchor: [0, -15],
   })
@@ -279,14 +283,17 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
   // Memoize restaurant, customer, and roadblock custom icons
   const restaurantIcon = useMemo(() => createRestaurantIcon(), [])
   const customerIcon = useMemo(() => createCustomerIcon(), [])
+  const vipCustomerIcon = useMemo(() => createCustomerIcon(true), [])
   const roadblockIcon = useMemo(() => createRoadblockIcon(), [])
   const deliveryDestinationIcon = useMemo(() => createDeliveryDestinationIcon(), [])
+  const vipDeliveryDestinationIcon = useMemo(() => createDeliveryDestinationIcon(true), [])
 
   // Active delivery destination points (Small Red Dots) for in-transit riders
   // Once the rider reaches a drop-off point, the order is delivered and this dot disappears
   const activeDeliveryDots = useMemo(() => {
     const dots = []
     const seen = new Set()
+    const priorityOrderIds = new Set(orders.filter(order => order.is_priority).map(order => order.order_id))
 
     drivers.forEach(d => {
       if (d.status === 'idle') return
@@ -302,6 +309,7 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
                 driverId: d.driver_id,
                 driverName: d.name,
                 orderId: s.order_id,
+                isPriority: priorityOrderIds.has(s.order_id),
                 lat: s.lat,
                 lng: s.lng,
               })
@@ -320,6 +328,7 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
                 driverId: d.driver_id,
                 driverName: d.name,
                 orderId: o.order_id,
+                isPriority: o.is_priority || priorityOrderIds.has(o.order_id),
                 lat: o.customer_lat,
                 lng: o.customer_lng,
               })
@@ -338,6 +347,7 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
               driverId: d.driver_id,
               driverName: d.name,
               orderId: null,
+              isPriority: false,
               lat: dest[0],
               lng: dest[1],
             })
@@ -347,7 +357,7 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
     })
 
     return dots
-  }, [drivers])
+  }, [drivers, orders])
 
   // Forward route polylines starting precisely at current rider coordinates with driver-specific colors
   const routes = useMemo(() => {
@@ -500,7 +510,7 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
           <Marker
             key={`delivery-dot-${dot.driverId}-${dot.orderId || `${dot.lat}-${dot.lng}`}`}
             position={[dot.lat, dot.lng]}
-            icon={deliveryDestinationIcon}
+            icon={dot.isPriority ? vipDeliveryDestinationIcon : deliveryDestinationIcon}
           >
             <Popup>
               <div className="driver-popup">
@@ -529,7 +539,7 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
             <Marker
               key={`cust-${order.order_id}`}
               position={[order.customer_lat, order.customer_lng]}
-              icon={customerIcon}
+              icon={order.is_priority ? vipCustomerIcon : customerIcon}
             >
               <Popup>
                 <div className="driver-popup">

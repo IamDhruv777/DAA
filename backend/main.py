@@ -335,6 +335,7 @@ async def inject_order(data: dict = None):
         "order_id": order["order_id"],
         "reroute_status": event.get("status", "unknown"),
         "drivers": event.get("drivers", []),
+        "event": event,
         "message": event.get("message", f"📦 VIP ORDER {order['order_id']} added."),
     }
 
@@ -351,6 +352,7 @@ async def inject_dual_order():
         "order_id": order["order_id"],
         "reroute_status": event.get("status", "unknown"),
         "drivers": event.get("drivers", []),
+        "event": event,
         "message": event.get("message", f"📦 VIP ORDER {order['order_id']} added across both simulations."),
     }
 

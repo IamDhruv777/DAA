@@ -351,6 +351,14 @@ class SimulationEngine:
             "is_priority": True
         }
         
+        existing_route_drivers = {
+            driver["driver_id"]
+            for driver in self.drivers
+            if driver["status"] in ("picking", "delivering")
+            and driver.get("current_orders")
+            and driver.get("route_coords")
+        }
+
         # Insert immediately into active released pool
         self.orders.insert(self.orders_released, new_order)
         self.orders_released += 1
@@ -361,24 +369,32 @@ class SimulationEngine:
         self._compute_routes()
         
         # Recalculate routes if any active driver was reassigned
-        rerouted_drivers = self.recalculate_active_routes(
+        recalculated_drivers = self.recalculate_active_routes(
             reason=f"New VIP Order {order_id} arrived",
             traffic_level=1.2
         )
+        rerouted_drivers = [driver_id for driver_id in recalculated_drivers if driver_id in existing_route_drivers]
+        dispatched_drivers = [driver_id for driver_id in recalculated_drivers if driver_id not in existing_route_drivers]
+
+        status_parts = [f"📦 VIP ORDER {order_id} added."]
         if rerouted_drivers:
-            reroute_status = "rerouted"
-            message = f"📦 VIP ORDER {order_id}: recalculated routes for {len(rerouted_drivers)} rider(s). New paths are active."
-        else:
-            reroute_status = "no_reroute_needed"
-            message = f"📦 VIP ORDER {order_id}: added to dispatch. No active rider routes needed rerouting."
+            status_parts.append(f"Recalculated {len(rerouted_drivers)} existing route(s): {', '.join(rerouted_drivers)}.")
+        if dispatched_drivers:
+            status_parts.append(f"Dispatched to {len(dispatched_drivers)} rider(s): {', '.join(dispatched_drivers)}.")
+        if not rerouted_drivers and not dispatched_drivers:
+            status_parts.append("Queued; no active routes needed rerouting.")
+
+        reroute_status = "rerouted" if rerouted_drivers else ("dispatched" if dispatched_drivers else "queued")
 
         self.last_reroute_event = {
             "id": f"reroute-{int(time.time() * 1000)}",
             "timestamp": time.time(),
             "reason": f"New VIP Order {order_id} arrived",
-            "message": message,
+            "message": " ".join(status_parts),
             "status": reroute_status,
-            "drivers": rerouted_drivers,
+            "drivers": recalculated_drivers,
+            "rerouted_drivers": rerouted_drivers,
+            "dispatched_drivers": dispatched_drivers,
         }
         return new_order
 

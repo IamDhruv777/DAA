@@ -3,6 +3,8 @@ import MapView from './MapView';
 import MetricsPanel from './MetricsPanel';
 import AlgorithmSelector from './AlgorithmSelector';
 import SimControls from './SimControls';
+import EventHistory from './EventHistory';
+import useEventHistory from '../hooks/useEventHistory';
 import AlgorithmBattleModal from './AlgorithmBattleModal';
 import TSPBattleModal from './TSPBattleModal';
 import './Dashboard.css';
@@ -30,22 +32,25 @@ function Dashboard({
   const [darkMode, setDarkMode] = useState(true);
   const [activeBannerMessage, setActiveBannerMessage] = useState(null);
   const [isInjectingOrder, setIsInjectingOrder] = useState(false);
+  const [eventHistory, recordEvent] = useEventHistory();
   const [showBattleModal, setShowBattleModal] = useState(false);
   const [showTSPModal, setShowTSPModal] = useState(false);
 
   useEffect(() => {
     if (simState?.reroute_event?.message) {
       setActiveBannerMessage(simState.reroute_event.message);
+      recordEvent(simState.reroute_event);
       const timer = setTimeout(() => setActiveBannerMessage(null), 6000);
       return () => clearTimeout(timer);
     }
-  }, [simState?.reroute_event?.id]);
+  }, [simState?.reroute_event?.id, recordEvent]);
 
   const handleInjectOrder = async () => {
     setIsInjectingOrder(true);
     try {
       const result = await onInjectOrder();
       setActiveBannerMessage(result?.message || 'VIP order injection failed.');
+      if (result?.event) recordEvent(result.event);
       setTimeout(() => setActiveBannerMessage(null), 6000);
     } catch (error) {
       setActiveBannerMessage('VIP order injection failed.');
@@ -215,6 +220,8 @@ function Dashboard({
               isInjectingOrder={isInjectingOrder}
             />
           </div>
+
+          <EventHistory events={eventHistory} />
 
           <div className="panel-section">
             <h3 className="panel-title">🧠 Routing Strategy</h3>
