@@ -8,7 +8,8 @@ function SimControls({
   onConfigChange,
   onTriggerRoadClosure,
   onTriggerTrafficSurge,
-  onInjectOrder
+  onInjectOrder,
+  isInjectingOrder = false
 }) {
   return (
     <div className="glass-panel">
@@ -53,9 +54,10 @@ function SimControls({
               className="btn btn-secondary" 
               style={{ flex: 1, fontSize: '11px', padding: '6px 4px', background: 'rgba(0, 122, 255, 0.15)', borderColor: '#0a84ff', color: '#0a84ff' }}
               onClick={onInjectOrder}
+              disabled={isInjectingOrder}
               title="Inject a new VIP order and recalculate stop sequence"
             >
-              📦 VIP Order
+              {isInjectingOrder ? '📦 Adding VIP...' : '📦 VIP Order'}
             </button>
           </div>
         </div>

@@ -29,6 +29,7 @@ function Dashboard({
   const [showHeatmap, setShowHeatmap] = useState(false);
   const [darkMode, setDarkMode] = useState(true);
   const [activeBannerMessage, setActiveBannerMessage] = useState(null);
+  const [isInjectingOrder, setIsInjectingOrder] = useState(false);
   const [showBattleModal, setShowBattleModal] = useState(false);
   const [showTSPModal, setShowTSPModal] = useState(false);
 
@@ -39,6 +40,20 @@ function Dashboard({
       return () => clearTimeout(timer);
     }
   }, [simState?.reroute_event?.id]);
+
+  const handleInjectOrder = async () => {
+    setIsInjectingOrder(true);
+    try {
+      const result = await onInjectOrder();
+      setActiveBannerMessage(result?.message || 'VIP order injection failed.');
+      setTimeout(() => setActiveBannerMessage(null), 6000);
+    } catch (error) {
+      setActiveBannerMessage('VIP order injection failed.');
+      setTimeout(() => setActiveBannerMessage(null), 6000);
+    } finally {
+      setIsInjectingOrder(false);
+    }
+  };
 
   return (
     <div className={`app ${darkMode ? 'dark' : 'light'}`}>
@@ -196,7 +211,8 @@ function Dashboard({
               onConfigChange={setSimSetupConfig}
               onTriggerRoadClosure={onTriggerRoadClosure}
               onTriggerTrafficSurge={onTriggerTrafficSurge}
-              onInjectOrder={onInjectOrder}
+              onInjectOrder={handleInjectOrder}
+              isInjectingOrder={isInjectingOrder}
             />
           </div>
 

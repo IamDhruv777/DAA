@@ -507,6 +507,7 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
                 <h4 style={{ color: '#ff3b30' }}>🔴 Delivery Drop-off Point</h4>
                 <p><strong>Rider:</strong> {dot.driverName || dot.driverId}</p>
                 {dot.orderId && <p><strong>Order:</strong> {dot.orderId}</p>}
+                {orders.some(order => order.order_id === dot.orderId && order.is_priority) && <p style={{ color: '#ff9f0a', fontWeight: 700 }}>📦 VIP ORDER · PRIORITY DELIVERY</p>}
                 <div style={{ marginTop: '5px', fontSize: '11px', color: '#ff9500' }}>
                   ⏳ En route. Once rider arrives here, the delivery is complete and this red dot disappears.
                 </div>
@@ -534,6 +535,7 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
                 <div className="driver-popup">
                   <h4>👤 Customer</h4>
                   <p>Order: {order.order_id}</p>
+                  {order.is_priority && <p style={{ color: '#ff9f0a', fontWeight: 700 }}>📦 VIP ORDER · PRIORITY DELIVERY</p>}
                   <p>Status: {order.status}</p>
                 </div>
               </Popup>

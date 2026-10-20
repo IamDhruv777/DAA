@@ -129,6 +129,7 @@ async def get_orders():
             "restaurant_name": o.get("restaurant_name", "Unknown"),
             "restaurant_zone": o.get("restaurant_zone", "Unknown"),
             "status": o["status"],
+            "is_priority": o.get("is_priority", False),
         })
     return {"orders": visible[:200], "stats": stats}
 
@@ -328,7 +329,14 @@ async def inject_order(data: dict = None):
     if not simulation.is_running:
         return {"status": "error", "message": "Simulation is not running."}
     order = simulation.inject_order(data)
-    return {"status": "success", "order_id": order["order_id"], "message": f"Priority Order {order['order_id']} injected."}
+    event = simulation.last_reroute_event or {}
+    return {
+        "status": "success",
+        "order_id": order["order_id"],
+        "reroute_status": event.get("status", "unknown"),
+        "drivers": event.get("drivers", []),
+        "message": event.get("message", f"📦 VIP ORDER {order['order_id']} added."),
+    }
 
 
 @app.post("/api/simulation/dual/inject-order")
@@ -337,7 +345,14 @@ async def inject_dual_order():
     if not dual_simulation.is_running:
         return {"status": "error", "message": "Dual simulation is not running."}
     order = dual_simulation.inject_order()
-    return {"status": "success", "order_id": order["order_id"], "message": f"Priority Order {order['order_id']} injected across both simulations."}
+    event = dual_simulation.optimized.last_reroute_event or {}
+    return {
+        "status": "success",
+        "order_id": order["order_id"],
+        "reroute_status": event.get("status", "unknown"),
+        "drivers": event.get("drivers", []),
+        "message": event.get("message", f"📦 VIP ORDER {order['order_id']} added across both simulations."),
+    }
 
 
 

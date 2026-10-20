@@ -361,16 +361,25 @@ class SimulationEngine:
         self._compute_routes()
         
         # Recalculate routes if any active driver was reassigned
-        self.recalculate_active_routes(reason=f"New Priority Order {order_id} arrived", traffic_level=1.2)
-        
-        if not self.last_reroute_event or self.last_reroute_event.get("reason") != f"New Priority Order {order_id} arrived":
-            self.last_reroute_event = {
-                "id": f"reroute-{int(time.time() * 1000)}",
-                "timestamp": time.time(),
-                "reason": f"New VIP Order {order_id} Arrived",
-                "message": f"📦 Dynamic Re-Route: New Priority Order {order_id} arrived! Evaluated sequence & dispatch.",
-                "drivers": []
-            }
+        rerouted_drivers = self.recalculate_active_routes(
+            reason=f"New VIP Order {order_id} arrived",
+            traffic_level=1.2
+        )
+        if rerouted_drivers:
+            reroute_status = "rerouted"
+            message = f"📦 VIP ORDER {order_id}: recalculated routes for {len(rerouted_drivers)} rider(s). New paths are active."
+        else:
+            reroute_status = "no_reroute_needed"
+            message = f"📦 VIP ORDER {order_id}: added to dispatch. No active rider routes needed rerouting."
+
+        self.last_reroute_event = {
+            "id": f"reroute-{int(time.time() * 1000)}",
+            "timestamp": time.time(),
+            "reason": f"New VIP Order {order_id} arrived",
+            "message": message,
+            "status": reroute_status,
+            "drivers": rerouted_drivers,
+        }
         return new_order
 
     def recalculate_active_routes(self, reason="Road Obstruction", traffic_level=1.5, only_affected=False):
@@ -429,6 +438,7 @@ class SimulationEngine:
                 "message": f"⚠️ Dynamic Re-Route ({reason}): Recalculated paths for {len(rerouted_drivers)} active rider(s) using dynamic A* navigation.",
                 "drivers": rerouted_drivers
             }
+        return rerouted_drivers
 
     def _complete_delivery(self, driver):
         """Mark a driver's delivery as complete."""
@@ -588,6 +598,7 @@ class SimulationEngine:
                     "customer_lat": o["customer_lat"],
                     "customer_lng": o["customer_lng"],
                     "status": o["status"],
+                    "is_priority": o.get("is_priority", False),
                 })
 
         return {
