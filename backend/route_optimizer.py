@@ -157,14 +157,15 @@ def optimize_driver_route(G, driver, orders_list, routing_mode="dynamic", manual
     for i in range(len(ordered_nodes) - 1):
         u, v = ordered_nodes[i], ordered_nodes[i+1]
         
-        result = find_route(G, u, v, algorithm=manual_algorithm, dynamic_mode=(routing_mode=="dynamic"), traffic_level=traffic_level)
-        
-        if "error" not in result:
-            path = result["path_coords"]
-            if full_route_coords and path:
-                path = path[1:]
-            full_route_coords.extend(path)
-            total_dist_m += result["total_distance_m"]
+        if u != v:
+            result = find_route(G, u, v, algorithm=manual_algorithm, dynamic_mode=(routing_mode=="dynamic"), traffic_level=traffic_level)
+            
+            if "error" not in result:
+                path = result["path_coords"]
+                if full_route_coords and path:
+                    path = path[1:]
+                full_route_coords.extend(path)
+                total_dist_m += result["total_distance_m"]
         
         # Identify which order this stop belongs to
         matching_order = None

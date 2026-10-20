@@ -529,11 +529,36 @@ class SimulationEngine:
                             "order_id": o["order_id"],
                             "restaurant_name": o.get("restaurant_name", "Cafe Goodluck"),
                             "restaurant_zone": o.get("restaurant_zone", "Pune Core"),
+                            "restaurant_lat": o["restaurant_lat"],
+                            "restaurant_lng": o["restaurant_lng"],
+                            "customer_lat": o["customer_lat"],
+                            "customer_lng": o["customer_lng"],
                             "status": o["status"],
                             "is_priority": o.get("is_priority", False),
                             "items": o.get("items", ["Chicken Biryani", "Butter Naan", "Lassi"])
                         })
                         break
+
+            # Filter remaining active delivery stops for this driver (only non-delivered)
+            # Once rider reaches this point and finishes delivery, it immediately disappears
+            remaining_delivery_stops = []
+            for s in d.get("stops", []):
+                if s.get("type") == "delivery":
+                    oid = s.get("order_id")
+                    is_delivered = False
+                    if oid:
+                        for o in self.orders[:self.orders_released]:
+                            if o["order_id"] == oid and o.get("status") == "delivered":
+                                is_delivered = True
+                                break
+                    if not is_delivered:
+                        c = s.get("coords")
+                        if c:
+                            remaining_delivery_stops.append({
+                                "order_id": oid,
+                                "lat": c[0],
+                                "lng": c[1],
+                            })
 
             driver_positions.append({
                 "driver_id": d["driver_id"],
@@ -549,6 +574,7 @@ class SimulationEngine:
                 "speed_kmh": 38.0 if d["status"] != "idle" else 0.0,
                 "battery_pct": max(15, 100 - (d["stats"]["deliveries_completed"] * 6)),
                 "current_orders": active_orders_payload,
+                "delivery_stops": remaining_delivery_stops,
             })
 
         # Get visible orders (restaurants & customers)

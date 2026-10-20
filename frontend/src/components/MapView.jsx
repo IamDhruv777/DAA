@@ -189,6 +189,33 @@ function createRoadblockIcon() {
   })
 }
 
+// Custom Delivery Destination Icon (Crisp Red Small Dot with animated pulse indicating drop-off location)
+function createDeliveryDestinationIcon() {
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 30 30">
+      <defs>
+        <filter id="red-dot-glow" x="-50%" y="-50%" width="200%" height="200%">
+          <feDropShadow dx="0" dy="0" stdDeviation="3.5" flood-color="#ff3b30" flood-opacity="0.95"/>
+        </filter>
+      </defs>
+      <!-- Expanding ripple pulse -->
+      <circle cx="15" cy="15" r="7" fill="none" stroke="#ff3b30" stroke-width="2" opacity="0.8">
+        <animate attributeName="r" values="5;13;5" dur="1.6s" repeatCount="indefinite" />
+        <animate attributeName="opacity" values="0.95;0.1;0.95" dur="1.6s" repeatCount="indefinite" />
+      </circle>
+      <!-- Small crisp solid red dot with white border -->
+      <circle cx="15" cy="15" r="5" fill="#ff3b30" stroke="#ffffff" stroke-width="1.8" filter="url(#red-dot-glow)"/>
+    </svg>
+  `
+  return L.divIcon({
+    html: svg,
+    className: 'custom-delivery-dot',
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
+    popupAnchor: [0, -15],
+  })
+}
+
 // Heatmap layer component
 function HeatmapLayer({ points, visible }) {
   const map = useMap()
@@ -267,6 +294,74 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
   const restaurantIcon = useMemo(() => createRestaurantIcon(), [])
   const customerIcon = useMemo(() => createCustomerIcon(), [])
   const roadblockIcon = useMemo(() => createRoadblockIcon(), [])
+  const deliveryDestinationIcon = useMemo(() => createDeliveryDestinationIcon(), [])
+
+  // Active delivery destination points (Small Red Dots) for in-transit riders
+  // Once the rider reaches a drop-off point, the order is delivered and this dot disappears
+  const activeDeliveryDots = useMemo(() => {
+    const dots = []
+    const seen = new Set()
+
+    drivers.forEach(d => {
+      if (d.status === 'idle') return
+
+      // 1. Explicit delivery_stops from backend
+      if (Array.isArray(d.delivery_stops) && d.delivery_stops.length > 0) {
+        d.delivery_stops.forEach(s => {
+          if (s.lat && s.lng) {
+            const key = `${Number(s.lat).toFixed(5)},${Number(s.lng).toFixed(5)}`
+            if (!seen.has(key)) {
+              seen.add(key)
+              dots.push({
+                driverId: d.driver_id,
+                driverName: d.name,
+                orderId: s.order_id,
+                lat: s.lat,
+                lng: s.lng,
+              })
+            }
+          }
+        })
+      }
+      // 2. Active non-delivered orders in current_orders
+      else if (Array.isArray(d.current_orders) && d.current_orders.length > 0) {
+        d.current_orders.forEach(o => {
+          if (o.status !== 'delivered' && o.customer_lat && o.customer_lng) {
+            const key = `${Number(o.customer_lat).toFixed(5)},${Number(o.customer_lng).toFixed(5)}`
+            if (!seen.has(key)) {
+              seen.add(key)
+              dots.push({
+                driverId: d.driver_id,
+                driverName: d.name,
+                orderId: o.order_id,
+                lat: o.customer_lat,
+                lng: o.customer_lng,
+              })
+            }
+          }
+        })
+      }
+      // 3. Fallback to end of route_coords for delivering drivers
+      else if (d.status === 'delivering' && Array.isArray(d.route_coords) && d.route_coords.length > 0) {
+        const dest = d.route_coords[d.route_coords.length - 1]
+        if (dest && dest[0] && dest[1]) {
+          const key = `${Number(dest[0]).toFixed(5)},${Number(dest[1]).toFixed(5)}`
+          if (!seen.has(key)) {
+            seen.add(key)
+            dots.push({
+              driverId: d.driver_id,
+              driverName: d.name,
+              orderId: null,
+              lat: dest[0],
+              lng: dest[1],
+            })
+          }
+        }
+      }
+    })
+
+    return dots
+  }, [drivers])
 
   // Forward route polylines starting precisely at current rider coordinates with individual orange shades
   const routes = useMemo(() => {
@@ -413,22 +508,52 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
           </Marker>
         ))}
 
-        {/* Customer markers (Person Pin) */}
-        {orders.map(order => (
+        {/* Red Small Dot indicating that the rider has to finish delivery at this point */}
+        {/* Once the rider reaches this point, delivery completes and the red dot disappears, leading to next delivery */}
+        {activeDeliveryDots.map(dot => (
           <Marker
-            key={`cust-${order.order_id}`}
-            position={[order.customer_lat, order.customer_lng]}
-            icon={customerIcon}
+            key={`delivery-dot-${dot.driverId}-${dot.orderId || `${dot.lat}-${dot.lng}`}`}
+            position={[dot.lat, dot.lng]}
+            icon={deliveryDestinationIcon}
           >
             <Popup>
               <div className="driver-popup">
-                <h4>👤 Customer</h4>
-                <p>Order: {order.order_id}</p>
-                <p>Status: {order.status}</p>
+                <h4 style={{ color: '#ff3b30' }}>🔴 Delivery Drop-off Point</h4>
+                <p><strong>Rider:</strong> {dot.driverName || dot.driverId}</p>
+                {dot.orderId && <p><strong>Order:</strong> {dot.orderId}</p>}
+                <div style={{ marginTop: '5px', fontSize: '11px', color: '#ff9500' }}>
+                  ⏳ En route. Once rider arrives here, the delivery is complete and this red dot disappears.
+                </div>
               </div>
             </Popup>
           </Marker>
         ))}
+
+        {/* Customer markers (Person Pin for unassigned/pending pool) */}
+        {orders.map(order => {
+          // If this order's destination is already an active delivery target marked with the Red Dot, don't duplicate
+          const hasActiveRedDot = activeDeliveryDots.some(
+            d => d.orderId === order.order_id || 
+            (Math.abs(d.lat - order.customer_lat) < 0.0001 && Math.abs(d.lng - order.customer_lng) < 0.0001)
+          )
+          if (hasActiveRedDot) return null
+
+          return (
+            <Marker
+              key={`cust-${order.order_id}`}
+              position={[order.customer_lat, order.customer_lng]}
+              icon={customerIcon}
+            >
+              <Popup>
+                <div className="driver-popup">
+                  <h4>👤 Customer</h4>
+                  <p>Order: {order.order_id}</p>
+                  <p>Status: {order.status}</p>
+                </div>
+              </Popup>
+            </Marker>
+          )
+        })}
 
         {/* Driver markers (Miniature Motorbike with individual orange shades) */}
         {drivers.map((driver, idx) => {
