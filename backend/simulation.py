@@ -59,7 +59,7 @@ class SimulationEngine:
         self.routing_mode = "dynamic" # "dynamic" or "manual"
         self.manual_algorithm = "dijkstra" # "dijkstra", "astar", "bfs", "dfs", "greedy"
 
-    def initialize(self, num_orders=1000, num_drivers=50, city_name="Pune, India", tick_delay=0.8):
+    def initialize(self, num_orders=5, num_drivers=5, city_name="Pune, India", tick_delay=0.8):
         """Load graph, generate orders and drivers."""
         print(f"[SIM] Initializing simulation for {city_name} with {num_drivers} drivers and {num_orders} orders...")
         self.graph = load_graph(city_name)
@@ -351,6 +351,14 @@ class SimulationEngine:
             "is_priority": True
         }
         
+        existing_route_drivers = {
+            driver["driver_id"]
+            for driver in self.drivers
+            if driver["status"] in ("picking", "delivering")
+            and driver.get("current_orders")
+            and driver.get("route_coords")
+        }
+
         # Insert immediately into active released pool
         self.orders.insert(self.orders_released, new_order)
         self.orders_released += 1
@@ -361,16 +369,33 @@ class SimulationEngine:
         self._compute_routes()
         
         # Recalculate routes if any active driver was reassigned
-        self.recalculate_active_routes(reason=f"New Priority Order {order_id} arrived", traffic_level=1.2)
-        
-        if not self.last_reroute_event or self.last_reroute_event.get("reason") != f"New Priority Order {order_id} arrived":
-            self.last_reroute_event = {
-                "id": f"reroute-{int(time.time() * 1000)}",
-                "timestamp": time.time(),
-                "reason": f"New VIP Order {order_id} Arrived",
-                "message": f"📦 Dynamic Re-Route: New Priority Order {order_id} arrived! Evaluated sequence & dispatch.",
-                "drivers": []
-            }
+        recalculated_drivers = self.recalculate_active_routes(
+            reason=f"New VIP Order {order_id} arrived",
+            traffic_level=1.2
+        )
+        rerouted_drivers = [driver_id for driver_id in recalculated_drivers if driver_id in existing_route_drivers]
+        dispatched_drivers = [driver_id for driver_id in recalculated_drivers if driver_id not in existing_route_drivers]
+
+        status_parts = [f"📦 VIP ORDER {order_id} added."]
+        if rerouted_drivers:
+            status_parts.append(f"Recalculated {len(rerouted_drivers)} existing route(s): {', '.join(rerouted_drivers)}.")
+        if dispatched_drivers:
+            status_parts.append(f"Dispatched to {len(dispatched_drivers)} rider(s): {', '.join(dispatched_drivers)}.")
+        if not rerouted_drivers and not dispatched_drivers:
+            status_parts.append("Queued; no active routes needed rerouting.")
+
+        reroute_status = "rerouted" if rerouted_drivers else ("dispatched" if dispatched_drivers else "queued")
+
+        self.last_reroute_event = {
+            "id": f"reroute-{int(time.time() * 1000)}",
+            "timestamp": time.time(),
+            "reason": f"New VIP Order {order_id} arrived",
+            "message": " ".join(status_parts),
+            "status": reroute_status,
+            "drivers": recalculated_drivers,
+            "rerouted_drivers": rerouted_drivers,
+            "dispatched_drivers": dispatched_drivers,
+        }
         return new_order
 
     def recalculate_active_routes(self, reason="Road Obstruction", traffic_level=1.5, only_affected=False):
@@ -429,6 +454,7 @@ class SimulationEngine:
                 "message": f"⚠️ Dynamic Re-Route ({reason}): Recalculated paths for {len(rerouted_drivers)} active rider(s) using dynamic A* navigation.",
                 "drivers": rerouted_drivers
             }
+        return rerouted_drivers
 
     def _complete_delivery(self, driver):
         """Mark a driver's delivery as complete."""
@@ -529,11 +555,36 @@ class SimulationEngine:
                             "order_id": o["order_id"],
                             "restaurant_name": o.get("restaurant_name", "Cafe Goodluck"),
                             "restaurant_zone": o.get("restaurant_zone", "Pune Core"),
+                            "restaurant_lat": o["restaurant_lat"],
+                            "restaurant_lng": o["restaurant_lng"],
+                            "customer_lat": o["customer_lat"],
+                            "customer_lng": o["customer_lng"],
                             "status": o["status"],
                             "is_priority": o.get("is_priority", False),
                             "items": o.get("items", ["Chicken Biryani", "Butter Naan", "Lassi"])
                         })
                         break
+
+            # Filter remaining active delivery stops for this driver (only non-delivered)
+            # Once rider reaches this point and finishes delivery, it immediately disappears
+            remaining_delivery_stops = []
+            for s in d.get("stops", []):
+                if s.get("type") == "delivery":
+                    oid = s.get("order_id")
+                    is_delivered = False
+                    if oid:
+                        for o in self.orders[:self.orders_released]:
+                            if o["order_id"] == oid and o.get("status") == "delivered":
+                                is_delivered = True
+                                break
+                    if not is_delivered:
+                        c = s.get("coords")
+                        if c:
+                            remaining_delivery_stops.append({
+                                "order_id": oid,
+                                "lat": c[0],
+                                "lng": c[1],
+                            })
 
             driver_positions.append({
                 "driver_id": d["driver_id"],
@@ -549,6 +600,7 @@ class SimulationEngine:
                 "speed_kmh": 38.0 if d["status"] != "idle" else 0.0,
                 "battery_pct": max(15, 100 - (d["stats"]["deliveries_completed"] * 6)),
                 "current_orders": active_orders_payload,
+                "delivery_stops": remaining_delivery_stops,
             })
 
         # Get visible orders (restaurants & customers)
@@ -562,6 +614,7 @@ class SimulationEngine:
                     "customer_lat": o["customer_lat"],
                     "customer_lng": o["customer_lng"],
                     "status": o["status"],
+                    "is_priority": o.get("is_priority", False),
                 })
 
         return {

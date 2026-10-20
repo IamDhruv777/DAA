@@ -1,7 +1,7 @@
 import React from 'react';
 import './RiderFlightDeck.css';
 
-function RiderFlightDeck({ driver, isFollowing, onToggleFollow, onClose }) {
+function RiderFlightDeck({ driver, driverColor, isFollowing, onToggleFollow, onClose }) {
   if (!driver) return null;
 
   const statusColors = {
@@ -18,7 +18,7 @@ function RiderFlightDeck({ driver, isFollowing, onToggleFollow, onClose }) {
     returning: '🔄 Depot Return'
   };
 
-  const color = statusColors[driver.status] || '#94a3b8';
+  const color = driverColor || statusColors[driver.status] || '#94a3b8';
   const order = driver.current_orders && driver.current_orders.length > 0 ? driver.current_orders[0] : null;
 
   return (

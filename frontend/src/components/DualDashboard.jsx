@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import MapView from './MapView';
 import AlgorithmBattleModal from './AlgorithmBattleModal';
 import TSPBattleModal from './TSPBattleModal';
+import EventHistory from './EventHistory';
+import useEventHistory from '../hooks/useEventHistory';
 import './DualDashboard.css';
 
 function DualDashboard({
@@ -22,6 +24,7 @@ function DualDashboard({
   const [trafficLoading, setTrafficLoading] = useState(false);
   const [orderLoading, setOrderLoading] = useState(false);
   const [activeBannerMessage, setActiveBannerMessage] = useState(null);
+  const [eventHistory, recordEvent] = useEventHistory();
   const [showBattleModal, setShowBattleModal] = useState(false);
   const [showTSPModal, setShowTSPModal] = useState(false);
 
@@ -30,10 +33,11 @@ function DualDashboard({
     const event = dualState?.reroute_event || dualState?.optimized?.reroute_event;
     if (event && event.message) {
       setActiveBannerMessage(event.message);
+      recordEvent(event);
       const timer = setTimeout(() => setActiveBannerMessage(null), 6000);
       return () => clearTimeout(timer);
     }
-  }, [dualState?.reroute_event?.id, dualState?.optimized?.reroute_event?.id]);
+  }, [dualState?.reroute_event?.id, dualState?.optimized?.reroute_event?.id, recordEvent]);
 
   const baseline = dualState?.baseline || {};
   const optimized = dualState?.optimized || {};
@@ -83,6 +87,7 @@ function DualDashboard({
       const res = await onInjectOrder();
       if (res && res.message) {
         setActiveBannerMessage(res.message);
+        if (res.event) recordEvent(res.event);
         setTimeout(() => setActiveBannerMessage(null), 6000);
       }
     } catch (e) {
@@ -241,11 +246,11 @@ function DualDashboard({
             <span className="toolbar-label">📦 Orders:</span>
             <input
               type="number"
-              min="2"
-              max="200"
-              value={config?.num_orders || 15}
+              min="5"
+              max="100"
+              value={config?.num_orders || 5}
               disabled={isDualRunning}
-              onChange={(e) => onConfigChange({ ...config, num_orders: parseInt(e.target.value) || 2 })}
+              onChange={(e) => onConfigChange({ ...config, num_orders: Math.min(100, Math.max(5, parseInt(e.target.value) || 5)) })}
               className="dual-input"
             />
           </div>
@@ -279,6 +284,8 @@ function DualDashboard({
           <span className="alert-sub">Observe: Right map (SmartRoute) recomputes via dynamic A*; Left map (Baseline) remains static!</span>
         </div>
       )}
+
+      <EventHistory events={eventHistory} />
 
       {/* Side-by-Side Dual Map Panels */}
       <main className="dual-maps-container">

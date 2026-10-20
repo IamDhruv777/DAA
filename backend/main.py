@@ -25,7 +25,7 @@ from orders import get_order_stats
 from drivers import get_driver_stats
 from simulation import SimulationEngine
 from dual_simulation import DualSimulationEngine
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # Try to import ML predictor
 try:
@@ -46,8 +46,8 @@ sim_task = None
 async def lifespan(app):
     """Pre-load graph on startup."""
     print("[APP] Starting Food Delivery Route Optimizer...")
-    simulation.initialize()
-    dual_simulation.initialize(num_orders=15, num_drivers=5)
+    simulation.initialize(num_orders=5, num_drivers=5)
+    dual_simulation.initialize(num_orders=5, num_drivers=5)
     print("[APP] Ready! API docs at http://localhost:8000/docs")
     yield
     simulation.stop()
@@ -129,6 +129,7 @@ async def get_orders():
             "restaurant_name": o.get("restaurant_name", "Unknown"),
             "restaurant_zone": o.get("restaurant_zone", "Unknown"),
             "status": o["status"],
+            "is_priority": o.get("is_priority", False),
         })
     return {"orders": visible[:200], "stats": stats}
 
@@ -159,7 +160,7 @@ async def get_metrics():
 
 
 class SimStartConfig(BaseModel):
-    num_orders: int = 1000
+    num_orders: int = Field(default=5, ge=5, le=100)
     num_drivers: int = 50
     city: str = "Pune, India"
     tick_delay: float = 2.0
@@ -230,7 +231,7 @@ async def start_dual_simulation(config: SimStartConfig = None):
     if dual_simulation.is_running:
         return {"status": "already_running"}
 
-    orders = config.num_orders if config else 15
+    orders = config.num_orders if config else 5
     drivers = config.num_drivers if config else 5
     city = config.city if config else "Pune, India"
     delay = config.tick_delay if config else 0.8
@@ -261,7 +262,7 @@ async def reset_dual_simulation(config: SimStartConfig = None):
     if sim_task:
         sim_task.cancel()
         sim_task = None
-    orders = config.num_orders if config else 15
+    orders = config.num_orders if config else 5
     drivers = config.num_drivers if config else 5
     city = config.city if config else "Pune, India"
     delay = config.tick_delay if config else 0.8
@@ -328,7 +329,15 @@ async def inject_order(data: dict = None):
     if not simulation.is_running:
         return {"status": "error", "message": "Simulation is not running."}
     order = simulation.inject_order(data)
-    return {"status": "success", "order_id": order["order_id"], "message": f"Priority Order {order['order_id']} injected."}
+    event = simulation.last_reroute_event or {}
+    return {
+        "status": "success",
+        "order_id": order["order_id"],
+        "reroute_status": event.get("status", "unknown"),
+        "drivers": event.get("drivers", []),
+        "event": event,
+        "message": event.get("message", f"📦 VIP ORDER {order['order_id']} added."),
+    }
 
 
 @app.post("/api/simulation/dual/inject-order")
@@ -337,7 +346,15 @@ async def inject_dual_order():
     if not dual_simulation.is_running:
         return {"status": "error", "message": "Dual simulation is not running."}
     order = dual_simulation.inject_order()
-    return {"status": "success", "order_id": order["order_id"], "message": f"Priority Order {order['order_id']} injected across both simulations."}
+    event = dual_simulation.optimized.last_reroute_event or {}
+    return {
+        "status": "success",
+        "order_id": order["order_id"],
+        "reroute_status": event.get("status", "unknown"),
+        "drivers": event.get("drivers", []),
+        "event": event,
+        "message": event.get("message", f"📦 VIP ORDER {order['order_id']} added across both simulations."),
+    }
 
 
 
