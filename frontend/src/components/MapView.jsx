@@ -33,29 +33,15 @@ const STATUS_COLORS = {
   customer: '#af52de',    // Apple Purple
 }
 
-// Distinct shades of orange/amber so each driver's path & bike is clearly recognizable
-const DRIVER_ORANGE_PALETTE = [
-  '#ff4500', // Fiery Red-Orange
-  '#ff6d00', // Bright Blaze Orange
-  '#ff8500', // Vibrant Sunset Orange
-  '#ffa200', // Amber Gold Orange
-  '#ff5400', // Electric Coral Orange
-  '#f77f00', // Rich Sunburst Orange
-  '#ffb703', // Warm Marigold Orange
-  '#fb5607', // Neon Persimmon Orange
-  '#e85d04', // Deep Blood Orange
-  '#faa307', // Radiant Apricot Orange
-  '#f48c06', // Tangerine Glow
-  '#dc2f02', // Spiced Rust Orange
-]
-
-function getDriverOrangeShade(driverId, index = 0) {
+// Use a wide hue spread so every rider remains visually distinct as the fleet grows.
+function getDriverColor(driverId, index = 0) {
   const numMatch = String(driverId).match(/\d+/)
-  const idx = numMatch ? parseInt(numMatch[0], 10) : (typeof index === 'number' ? index : 0)
-  return DRIVER_ORANGE_PALETTE[Math.abs(idx) % DRIVER_ORANGE_PALETTE.length]
+  const idx = numMatch ? parseInt(numMatch[0], 10) - 1 : (typeof index === 'number' ? index : 0)
+  const hue = ((Math.abs(idx) * 137.508) + 12) % 360
+  return `hsl(${hue} 82% 62%)`
 }
 
-// Custom driver icon creator (Miniature Delivery Motorbike with Driver-Specific Orange Shades)
+// Custom driver icon creator with a stable color for each driver.
 function createDriverIcon(status, customColor) {
   const color = customColor || (status === 'idle' ? '#34c759' : '#ff9500')
   const glowId = `bike-glow-${status}-${String(color).replace(/[^a-zA-Z0-9]/g, '')}`
@@ -363,7 +349,7 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
     return dots
   }, [drivers])
 
-  // Forward route polylines starting precisely at current rider coordinates with individual orange shades
+  // Forward route polylines starting precisely at current rider coordinates with driver-specific colors
   const routes = useMemo(() => {
     return drivers
       .filter(d => d.status !== 'idle' && d.route_coords && d.route_coords.length > 0)
@@ -373,12 +359,12 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
         if (coords.length > 0 && (Math.abs(coords[0][0] - d.lat) > 0.00005 || Math.abs(coords[0][1] - d.lng) > 0.00005)) {
           coords.unshift([d.lat, d.lng])
         }
-        const orangeColor = getDriverOrangeShade(d.driver_id, idx)
+        const driverColor = getDriverColor(d.driver_id, idx)
         return {
           id: d.driver_id,
           coords: coords,
           status: d.status,
-          color: orangeColor,
+          color: driverColor,
         }
       })
   }, [drivers])
@@ -429,7 +415,7 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
         />
         <HeatmapLayer points={heatmapPoints} visible={showHeatmap} />
 
-        {/* Delivery routes (Each Driver has a Unique Vibrant Shade of Orange!) */}
+        {/* Delivery routes use the same unique color as each driver's marker. */}
         {routes.map(route => {
           const color = route.color || STATUS_COLORS[route.status] || '#ff8500';
           return (
@@ -555,12 +541,10 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
           )
         })}
 
-        {/* Driver markers (Miniature Motorbike with individual orange shades) */}
+        {/* Driver markers (Miniature Motorbikes with distinct driver colors) */}
         {drivers.map((driver, idx) => {
-          const driverOrange = getDriverOrangeShade(driver.driver_id, idx)
-          const icon = driver.status === 'idle'
-            ? createDriverIcon('idle', '#34c759')
-            : createDriverIcon(driver.status, driverOrange)
+          const driverColor = getDriverColor(driver.driver_id, idx)
+          const icon = createDriverIcon(driver.status, driverColor)
 
           return (
             <Marker
@@ -582,14 +566,14 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
                         width: '12px', 
                         height: '12px', 
                         borderRadius: '50%', 
-                        background: driverOrange, 
+                        background: driverColor, 
                         display: 'inline-block',
-                        boxShadow: `0 0 8px ${driverOrange}`
+                        boxShadow: `0 0 8px ${driverColor}`
                       }}
                       title="Driver's individual route color"
                     ></span>
                   </div>
-                  <span className={`status-tag ${driver.status}`} style={{ borderColor: driverOrange, color: driverOrange }}>
+                  <span className={`status-tag ${driver.status}`} style={{ borderColor: driverColor, color: driverColor }}>
                     {driver.status.toUpperCase()}
                   </span>
                   <p>Deliveries: {driver.deliveries || 0}</p>
@@ -662,10 +646,7 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
               <span className="legend-emoji">🚧</span> Blocked
             </div>
             <div className="legend-item">
-              <span className="status-dot" style={{ background: STATUS_COLORS.idle, boxShadow: `0 0 10px ${STATUS_COLORS.idle}` }}></span> 🏍️ Idle
-            </div>
-            <div className="legend-item">
-              <span className="status-dot" style={{ background: '#ff7b00', boxShadow: '0 0 10px #ff7b00' }}></span> 🏍️ Active (Shades of Orange)
+              <span className="status-dot" style={{ background: '#a78bfa', boxShadow: '0 0 10px #a78bfa' }}></span> 🏍️ Drivers (Individual Colors)
             </div>
           </div>
         </div>
@@ -675,6 +656,7 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
       {selectedDriver && (
         <RiderFlightDeck
           driver={selectedDriver}
+          driverColor={getDriverColor(selectedDriver.driver_id)}
           isFollowing={isFollowing}
           onToggleFollow={() => setIsFollowing(prev => !prev)}
           onClose={() => {

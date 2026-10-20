@@ -78,10 +78,10 @@ function SimControls({
         <input
           className="glass-input"
           type="number"
-          min="10"
-          max="5000"
+          min="5"
+          max="100"
           value={config.num_orders}
-          onChange={(e) => onConfigChange({...config, num_orders: parseInt(e.target.value) || 10})}
+          onChange={(e) => onConfigChange({...config, num_orders: Math.min(100, Math.max(5, parseInt(e.target.value) || 5))})}
         />
       </div>
 

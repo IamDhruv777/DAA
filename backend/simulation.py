@@ -59,7 +59,7 @@ class SimulationEngine:
         self.routing_mode = "dynamic" # "dynamic" or "manual"
         self.manual_algorithm = "dijkstra" # "dijkstra", "astar", "bfs", "dfs", "greedy"
 
-    def initialize(self, num_orders=1000, num_drivers=50, city_name="Pune, India", tick_delay=0.8):
+    def initialize(self, num_orders=5, num_drivers=5, city_name="Pune, India", tick_delay=0.8):
         """Load graph, generate orders and drivers."""
         print(f"[SIM] Initializing simulation for {city_name} with {num_drivers} drivers and {num_orders} orders...")
         self.graph = load_graph(city_name)

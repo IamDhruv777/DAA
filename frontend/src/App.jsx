@@ -17,7 +17,7 @@ function App() {
   const [error, setError] = useState(null);
   const [simSetupConfig, setSimSetupConfig] = useState({
     num_drivers: 5,
-    num_orders: 15,
+    num_orders: 5,
     city: "Pune, India",
     routing_mode: "dynamic",
     manual_algorithm: "dijkstra",
@@ -209,7 +209,7 @@ function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          num_orders: simSetupConfig.num_orders || 15,
+          num_orders: simSetupConfig.num_orders || 5,
           num_drivers: simSetupConfig.num_drivers || 5,
           city: simSetupConfig.city || "Pune, India",
           tick_delay: 0.8 / (simSetupConfig.speed || 1)
@@ -241,7 +241,7 @@ function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          num_orders: simSetupConfig.num_orders || 15,
+          num_orders: simSetupConfig.num_orders || 5,
           num_drivers: simSetupConfig.num_drivers || 5,
           city: simSetupConfig.city || "Pune, India",
           tick_delay: 0.8 / (simSetupConfig.speed || 1)

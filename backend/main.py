@@ -25,7 +25,7 @@ from orders import get_order_stats
 from drivers import get_driver_stats
 from simulation import SimulationEngine
 from dual_simulation import DualSimulationEngine
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # Try to import ML predictor
 try:
@@ -46,8 +46,8 @@ sim_task = None
 async def lifespan(app):
     """Pre-load graph on startup."""
     print("[APP] Starting Food Delivery Route Optimizer...")
-    simulation.initialize()
-    dual_simulation.initialize(num_orders=15, num_drivers=5)
+    simulation.initialize(num_orders=5, num_drivers=5)
+    dual_simulation.initialize(num_orders=5, num_drivers=5)
     print("[APP] Ready! API docs at http://localhost:8000/docs")
     yield
     simulation.stop()
@@ -159,7 +159,7 @@ async def get_metrics():
 
 
 class SimStartConfig(BaseModel):
-    num_orders: int = 1000
+    num_orders: int = Field(default=5, ge=5, le=100)
     num_drivers: int = 50
     city: str = "Pune, India"
     tick_delay: float = 2.0
@@ -230,7 +230,7 @@ async def start_dual_simulation(config: SimStartConfig = None):
     if dual_simulation.is_running:
         return {"status": "already_running"}
 
-    orders = config.num_orders if config else 15
+    orders = config.num_orders if config else 5
     drivers = config.num_drivers if config else 5
     city = config.city if config else "Pune, India"
     delay = config.tick_delay if config else 0.8
@@ -261,7 +261,7 @@ async def reset_dual_simulation(config: SimStartConfig = None):
     if sim_task:
         sim_task.cancel()
         sim_task = None
-    orders = config.num_orders if config else 15
+    orders = config.num_orders if config else 5
     drivers = config.num_drivers if config else 5
     city = config.city if config else "Pune, India"
     delay = config.tick_delay if config else 0.8

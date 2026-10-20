@@ -241,11 +241,11 @@ function DualDashboard({
             <span className="toolbar-label">📦 Orders:</span>
             <input
               type="number"
-              min="2"
-              max="200"
-              value={config?.num_orders || 15}
+              min="5"
+              max="100"
+              value={config?.num_orders || 5}
               disabled={isDualRunning}
-              onChange={(e) => onConfigChange({ ...config, num_orders: parseInt(e.target.value) || 2 })}
+              onChange={(e) => onConfigChange({ ...config, num_orders: Math.min(100, Math.max(5, parseInt(e.target.value) || 5)) })}
               className="dual-input"
             />
           </div>
