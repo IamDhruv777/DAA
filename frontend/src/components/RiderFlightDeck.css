@@ -16,6 +16,8 @@
   border-radius: 16px;
   padding: 16px;
   z-index: 1000;
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -122,6 +124,16 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.route-error-notice {
+  border: 1px solid rgba(255, 159, 10, 0.45);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: rgba(255, 159, 10, 0.12);
+  color: #ffd28a;
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 /* Telemetry Grid */

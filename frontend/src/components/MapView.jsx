@@ -33,29 +33,15 @@ const STATUS_COLORS = {
   customer: '#af52de',    // Apple Purple
 }
 
-// Distinct shades of orange/amber so each driver's path & bike is clearly recognizable
-const DRIVER_ORANGE_PALETTE = [
-  '#ff4500', // Fiery Red-Orange
-  '#ff6d00', // Bright Blaze Orange
-  '#ff8500', // Vibrant Sunset Orange
-  '#ffa200', // Amber Gold Orange
-  '#ff5400', // Electric Coral Orange
-  '#f77f00', // Rich Sunburst Orange
-  '#ffb703', // Warm Marigold Orange
-  '#fb5607', // Neon Persimmon Orange
-  '#e85d04', // Deep Blood Orange
-  '#faa307', // Radiant Apricot Orange
-  '#f48c06', // Tangerine Glow
-  '#dc2f02', // Spiced Rust Orange
-]
-
-function getDriverOrangeShade(driverId, index = 0) {
+// Use a wide hue spread so every rider remains visually distinct as the fleet grows.
+function getDriverColor(driverId, index = 0) {
   const numMatch = String(driverId).match(/\d+/)
-  const idx = numMatch ? parseInt(numMatch[0], 10) : (typeof index === 'number' ? index : 0)
-  return DRIVER_ORANGE_PALETTE[Math.abs(idx) % DRIVER_ORANGE_PALETTE.length]
+  const idx = numMatch ? parseInt(numMatch[0], 10) - 1 : (typeof index === 'number' ? index : 0)
+  const hue = ((Math.abs(idx) * 137.508) + 12) % 360
+  return `hsl(${hue} 82% 62%)`
 }
 
-// Custom driver icon creator (Miniature Delivery Motorbike with Driver-Specific Orange Shades)
+// Custom driver icon creator with a stable color for each driver.
 function createDriverIcon(status, customColor) {
   const color = customColor || (status === 'idle' ? '#34c759' : '#ff9500')
   const glowId = `bike-glow-${status}-${String(color).replace(/[^a-zA-Z0-9]/g, '')}`
@@ -135,7 +121,7 @@ function createRestaurantIcon() {
 }
 
 // Custom customer icon (Miniature Person Avatar)
-function createCustomerIcon() {
+function createCustomerIcon(isPriority = false) {
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 26 26">
       <defs>
@@ -155,9 +141,11 @@ function createCustomerIcon() {
     </svg>
   `
   return L.divIcon({
-    html: svg,
+    html: isPriority
+      ? `<div style="position:relative;width:44px;height:30px">${svg}<span style="position:absolute;left:23px;top:-2px;padding:2px 5px;border:1px solid #fff;border-radius:8px;background:#f59e0b;color:#201300;font:bold 8px Arial,sans-serif;line-height:10px;box-shadow:0 1px 6px #000">VIP</span></div>`
+      : svg,
     className: 'custom-customer-pin',
-    iconSize: [26, 26],
+    iconSize: isPriority ? [44, 30] : [26, 26],
     iconAnchor: [13, 13],
     popupAnchor: [0, -13],
   })
@@ -184,6 +172,35 @@ function createRoadblockIcon() {
     html: svg,
     className: 'custom-roadblock-pin',
     iconSize: [30, 30],
+    iconAnchor: [15, 15],
+    popupAnchor: [0, -15],
+  })
+}
+
+// Custom Delivery Destination Icon (Crisp Red Small Dot with animated pulse indicating drop-off location)
+function createDeliveryDestinationIcon(isPriority = false) {
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 30 30">
+      <defs>
+        <filter id="red-dot-glow" x="-50%" y="-50%" width="200%" height="200%">
+          <feDropShadow dx="0" dy="0" stdDeviation="3.5" flood-color="#ff3b30" flood-opacity="0.95"/>
+        </filter>
+      </defs>
+      <!-- Expanding ripple pulse -->
+      <circle cx="15" cy="15" r="7" fill="none" stroke="#ff3b30" stroke-width="2" opacity="0.8">
+        <animate attributeName="r" values="5;13;5" dur="1.6s" repeatCount="indefinite" />
+        <animate attributeName="opacity" values="0.95;0.1;0.95" dur="1.6s" repeatCount="indefinite" />
+      </circle>
+      <!-- Small crisp solid red dot with white border -->
+      <circle cx="15" cy="15" r="5" fill="#ff3b30" stroke="#ffffff" stroke-width="1.8" filter="url(#red-dot-glow)"/>
+    </svg>
+  `
+  return L.divIcon({
+    html: isPriority
+      ? `<div style="position:relative;width:44px;height:34px">${svg}<span style="position:absolute;right:-3px;top:-2px;padding:2px 5px;border:1px solid #fff;border-radius:8px;background:#f59e0b;color:#201300;font:bold 8px Arial,sans-serif;line-height:10px;box-shadow:0 1px 6px #000">VIP</span></div>`
+      : svg,
+    className: 'custom-delivery-dot',
+    iconSize: isPriority ? [44, 34] : [30, 30],
     iconAnchor: [15, 15],
     popupAnchor: [0, -15],
   })
@@ -266,9 +283,83 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
   // Memoize restaurant, customer, and roadblock custom icons
   const restaurantIcon = useMemo(() => createRestaurantIcon(), [])
   const customerIcon = useMemo(() => createCustomerIcon(), [])
+  const vipCustomerIcon = useMemo(() => createCustomerIcon(true), [])
   const roadblockIcon = useMemo(() => createRoadblockIcon(), [])
+  const deliveryDestinationIcon = useMemo(() => createDeliveryDestinationIcon(), [])
+  const vipDeliveryDestinationIcon = useMemo(() => createDeliveryDestinationIcon(true), [])
 
-  // Forward route polylines starting precisely at current rider coordinates with individual orange shades
+  // Active delivery destination points (Small Red Dots) for in-transit riders
+  // Once the rider reaches a drop-off point, the order is delivered and this dot disappears
+  const activeDeliveryDots = useMemo(() => {
+    const dots = []
+    const seen = new Set()
+    const priorityOrderIds = new Set(orders.filter(order => order.is_priority).map(order => order.order_id))
+
+    drivers.forEach(d => {
+      if (d.status === 'idle') return
+
+      // 1. Explicit delivery_stops from backend
+      if (Array.isArray(d.delivery_stops) && d.delivery_stops.length > 0) {
+        d.delivery_stops.forEach(s => {
+          if (s.lat && s.lng) {
+            const key = `${Number(s.lat).toFixed(5)},${Number(s.lng).toFixed(5)}`
+            if (!seen.has(key)) {
+              seen.add(key)
+              dots.push({
+                driverId: d.driver_id,
+                driverName: d.name,
+                orderId: s.order_id,
+                isPriority: priorityOrderIds.has(s.order_id),
+                lat: s.lat,
+                lng: s.lng,
+              })
+            }
+          }
+        })
+      }
+      // 2. Active non-delivered orders in current_orders
+      else if (Array.isArray(d.current_orders) && d.current_orders.length > 0) {
+        d.current_orders.forEach(o => {
+          if (o.status !== 'delivered' && o.customer_lat && o.customer_lng) {
+            const key = `${Number(o.customer_lat).toFixed(5)},${Number(o.customer_lng).toFixed(5)}`
+            if (!seen.has(key)) {
+              seen.add(key)
+              dots.push({
+                driverId: d.driver_id,
+                driverName: d.name,
+                orderId: o.order_id,
+                isPriority: o.is_priority || priorityOrderIds.has(o.order_id),
+                lat: o.customer_lat,
+                lng: o.customer_lng,
+              })
+            }
+          }
+        })
+      }
+      // 3. Fallback to end of route_coords for delivering drivers
+      else if (d.status === 'delivering' && Array.isArray(d.route_coords) && d.route_coords.length > 0) {
+        const dest = d.route_coords[d.route_coords.length - 1]
+        if (dest && dest[0] && dest[1]) {
+          const key = `${Number(dest[0]).toFixed(5)},${Number(dest[1]).toFixed(5)}`
+          if (!seen.has(key)) {
+            seen.add(key)
+            dots.push({
+              driverId: d.driver_id,
+              driverName: d.name,
+              orderId: null,
+              isPriority: false,
+              lat: dest[0],
+              lng: dest[1],
+            })
+          }
+        }
+      }
+    })
+
+    return dots
+  }, [drivers, orders])
+
+  // Forward route polylines starting precisely at current rider coordinates with driver-specific colors
   const routes = useMemo(() => {
     return drivers
       .filter(d => d.status !== 'idle' && d.route_coords && d.route_coords.length > 0)
@@ -278,15 +369,17 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
         if (coords.length > 0 && (Math.abs(coords[0][0] - d.lat) > 0.00005 || Math.abs(coords[0][1] - d.lng) > 0.00005)) {
           coords.unshift([d.lat, d.lng])
         }
-        const orangeColor = getDriverOrangeShade(d.driver_id, idx)
+        const driverColor = getDriverColor(d.driver_id, idx)
         return {
           id: d.driver_id,
           coords: coords,
           status: d.status,
-          color: orangeColor,
+          color: driverColor,
+          selected: d.driver_id === selectedDriverId,
         }
       })
-  }, [drivers])
+      .sort((a, b) => Number(a.selected) - Number(b.selected))
+  }, [drivers, selectedDriverId])
 
   // Heatmap data: all restaurant and customer locations
   const heatmapPoints = useMemo(() => {
@@ -334,7 +427,7 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
         />
         <HeatmapLayer points={heatmapPoints} visible={showHeatmap} />
 
-        {/* Delivery routes (Each Driver has a Unique Vibrant Shade of Orange!) */}
+        {/* Delivery routes use the same unique color as each driver's marker. */}
         {routes.map(route => {
           const color = route.color || STATUS_COLORS[route.status] || '#ff8500';
           return (
@@ -344,8 +437,8 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
                 positions={route.coords}
                 pathOptions={{
                   color: color,
-                  weight: 9,
-                  opacity: 0.35,
+                  weight: route.selected ? 14 : 9,
+                  opacity: route.selected ? 0.7 : 0.35,
                   lineCap: 'round',
                   lineJoin: 'round',
                 }}
@@ -355,8 +448,8 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
                 positions={route.coords}
                 pathOptions={{
                   color: color,
-                  weight: 4,
-                  opacity: 0.95,
+                  weight: route.selected ? 7 : 4,
+                  opacity: 1,
                   lineCap: 'round',
                   lineJoin: 'round',
                 }}
@@ -366,8 +459,8 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
                 positions={route.coords}
                 pathOptions={{
                   color: '#ffffff',
-                  weight: 1.2,
-                  opacity: 0.8,
+                  weight: route.selected ? 2.2 : 1.2,
+                  opacity: 0.95,
                   lineCap: 'round',
                   lineJoin: 'round',
                 }}
@@ -413,29 +506,60 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
           </Marker>
         ))}
 
-        {/* Customer markers (Person Pin) */}
-        {orders.map(order => (
+        {/* Red Small Dot indicating that the rider has to finish delivery at this point */}
+        {/* Once the rider reaches this point, delivery completes and the red dot disappears, leading to next delivery */}
+        {activeDeliveryDots.map(dot => (
           <Marker
-            key={`cust-${order.order_id}`}
-            position={[order.customer_lat, order.customer_lng]}
-            icon={customerIcon}
+            key={`delivery-dot-${dot.driverId}-${dot.orderId || `${dot.lat}-${dot.lng}`}`}
+            position={[dot.lat, dot.lng]}
+            icon={dot.isPriority ? vipDeliveryDestinationIcon : deliveryDestinationIcon}
           >
             <Popup>
               <div className="driver-popup">
-                <h4>👤 Customer</h4>
-                <p>Order: {order.order_id}</p>
-                <p>Status: {order.status}</p>
+                <h4 style={{ color: '#ff3b30' }}>📍 Customer drop-off</h4>
+                <p><strong>Rider:</strong> {dot.driverName || dot.driverId}</p>
+                {dot.orderId && <p><strong>Order:</strong> {dot.orderId}</p>}
+                <p><strong>Destination:</strong> {Number(dot.lat).toFixed(5)}, {Number(dot.lng).toFixed(5)}</p>
+                {orders.some(order => order.order_id === dot.orderId && order.is_priority) && <p style={{ color: '#ff9f0a', fontWeight: 700 }}>📦 VIP ORDER · PRIORITY DELIVERY</p>}
+                <div style={{ marginTop: '5px', fontSize: '11px', color: '#ff9500' }}>
+                  ⏳ En route. Once rider arrives here, the delivery is complete and this red dot disappears.
+                </div>
               </div>
             </Popup>
           </Marker>
         ))}
 
-        {/* Driver markers (Miniature Motorbike with individual orange shades) */}
+        {/* Customer markers (Person Pin for unassigned/pending pool) */}
+        {orders.map(order => {
+          // If this order's destination is already an active delivery target marked with the Red Dot, don't duplicate
+          const hasActiveRedDot = activeDeliveryDots.some(
+            d => d.orderId === order.order_id ||
+            (Math.abs(d.lat - order.customer_lat) < 0.0001 && Math.abs(d.lng - order.customer_lng) < 0.0001)
+          )
+          if (hasActiveRedDot) return null
+
+          return (
+            <Marker
+              key={`cust-${order.order_id}`}
+              position={[order.customer_lat, order.customer_lng]}
+              icon={order.is_priority ? vipCustomerIcon : customerIcon}
+            >
+              <Popup>
+                <div className="driver-popup">
+                  <h4>👤 Customer</h4>
+                  <p>Order: {order.order_id}</p>
+                  {order.is_priority && <p style={{ color: '#ff9f0a', fontWeight: 700 }}>📦 VIP ORDER · PRIORITY DELIVERY</p>}
+                  <p>Status: {order.status}</p>
+                </div>
+              </Popup>
+            </Marker>
+          )
+        })}
+
+        {/* Driver markers (Miniature Motorbikes with distinct driver colors) */}
         {drivers.map((driver, idx) => {
-          const driverOrange = getDriverOrangeShade(driver.driver_id, idx)
-          const icon = driver.status === 'idle'
-            ? createDriverIcon('idle', '#34c759')
-            : createDriverIcon(driver.status, driverOrange)
+          const driverColor = getDriverColor(driver.driver_id, idx)
+          const icon = createDriverIcon(driver.status, driverColor)
 
           return (
             <Marker
@@ -457,14 +581,14 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
                         width: '12px', 
                         height: '12px', 
                         borderRadius: '50%', 
-                        background: driverOrange, 
+                        background: driverColor,
                         display: 'inline-block',
-                        boxShadow: `0 0 8px ${driverOrange}`
+                        boxShadow: `0 0 8px ${driverColor}`
                       }}
                       title="Driver's individual route color"
                     ></span>
                   </div>
-                  <span className={`status-tag ${driver.status}`} style={{ borderColor: driverOrange, color: driverOrange }}>
+                  <span className={`status-tag ${driver.status}`} style={{ borderColor: driverColor, color: driverColor }}>
                     {driver.status.toUpperCase()}
                   </span>
                   <p>Deliveries: {driver.deliveries || 0}</p>
@@ -537,10 +661,7 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
               <span className="legend-emoji">🚧</span> Blocked
             </div>
             <div className="legend-item">
-              <span className="status-dot" style={{ background: STATUS_COLORS.idle, boxShadow: `0 0 10px ${STATUS_COLORS.idle}` }}></span> 🏍️ Idle
-            </div>
-            <div className="legend-item">
-              <span className="status-dot" style={{ background: '#ff7b00', boxShadow: '0 0 10px #ff7b00' }}></span> 🏍️ Active (Shades of Orange)
+              <span className="status-dot" style={{ background: '#a78bfa', boxShadow: '0 0 10px #a78bfa' }}></span> 🏍️ Drivers (Individual Colors)
             </div>
           </div>
         </div>
@@ -550,6 +671,7 @@ function MapView({ drivers, orders, isRunning, showHeatmap, debugRouteData, city
       {selectedDriver && (
         <RiderFlightDeck
           driver={selectedDriver}
+          driverColor={getDriverColor(selectedDriver.driver_id)}
           isFollowing={isFollowing}
           onToggleFollow={() => setIsFollowing(prev => !prev)}
           onClose={() => {

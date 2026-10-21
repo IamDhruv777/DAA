@@ -39,7 +39,9 @@ def _configure_osmnx():
 def _add_base_attributes(G):
     """Add base travel time and traffic multiplier to all edges."""
     for u, v, data in G.edges(data=True):
-        length = data.get("length", 100)  # meters
+        # NetworkX's GraphML reader preserves numeric OSM attributes as strings.
+        length = float(data.get("length", 100))  # meters
+        data["length"] = length
         # Assume average speed 30 km/h = 8.33 m/s in city
         base_speed = 8.33  # m/s
         data["base_travel_time"] = length / base_speed
@@ -165,9 +167,20 @@ def load_graph(city_name="Pune, India"):
     if _graph is not None and getattr(_graph, "city_name", "") == city_name:
         return _graph
 
-    if os.path.exists(graph_file) and ox is not None:
+    if os.path.exists(graph_file):
         print(f"Loading cached graph from {graph_file}...")
-        _graph = ox.load_graphml(graph_file)
+        if ox is not None:
+            _graph = ox.load_graphml(graph_file)
+        else:
+            print("OSMnx unavailable; reading cached road graph with NetworkX...")
+            try:
+                _graph = nx.read_graphml(graph_file, node_type=int)
+            except (TypeError, ValueError):
+                _graph = nx.read_graphml(graph_file)
+            for _, data in _graph.nodes(data=True):
+                for coordinate in ("x", "y"):
+                    if coordinate in data:
+                        data[coordinate] = float(data[coordinate])
         _graph = _add_base_attributes(_graph)
     elif ox is not None:
         try:
