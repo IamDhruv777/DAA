@@ -59,7 +59,7 @@ class SimulationEngine:
         self.routing_mode = "dynamic" # "dynamic" or "manual"
         self.manual_algorithm = "dijkstra" # "dijkstra", "astar", "bfs", "dfs", "greedy"
 
-    def initialize(self, num_orders=1000, num_drivers=50, city_name="Pune, India", tick_delay=0.8):
+    def initialize(self, num_orders=5, num_drivers=5, city_name="Pune, India", tick_delay=0.8):
         """Load graph, generate orders and drivers."""
         print(f"[SIM] Initializing simulation for {city_name} with {num_drivers} drivers and {num_orders} orders...")
         self.graph = load_graph(city_name)
@@ -148,11 +148,11 @@ class SimulationEngine:
     def _compute_routes(self):
         """Compute optimized routes for newly assigned drivers."""
         for driver in self.drivers:
-            if driver["status"] == "picking" and not driver["route_coords"]:
+            if driver["status"] in ("picking", "delivering") and not driver["route_coords"]:
                 # Find the orders for this driver
                 driver_orders = []
                 for order in self.orders[:self.orders_released]:
-                    if order["order_id"] in driver["current_orders"]:
+                    if order["order_id"] in driver["current_orders"] and order.get("status") != "delivered":
                         driver_orders.append(order)
 
                 if driver_orders:
@@ -177,6 +177,7 @@ class SimulationEngine:
                     driver["route_progress"] = 0
                     driver["total_route_distance"] = total_dist
                     driver["stops"] = stops
+                    driver["route_error"] = not bool(route_coords)
 
                     # If route contains pickup stops, driver starts in 'picking' mode
                     has_pickups = any(s.get("type") == "pickup" for s in stops)
@@ -189,6 +190,39 @@ class SimulationEngine:
                         driver["status"] = "delivering"
                         for order in driver_orders:
                             order["status"] = "picked"
+                else:
+                    self._complete_delivery(driver)
+
+    def _route_remaining_orders(self, driver):
+        """Rebuild a route for any assigned orders not yet delivered."""
+        current_order_ids = set(driver.get("current_orders", []))
+        remaining_orders = [
+            order for order in self.orders[:self.orders_released]
+            if order["order_id"] in current_order_ids and order.get("status") != "delivered"
+        ]
+
+        if not remaining_orders:
+            self._complete_delivery(driver)
+            return
+
+        route_coords, stops, total_dist = optimize_driver_route(
+            self.graph,
+            driver,
+            remaining_orders,
+            routing_mode=self.routing_mode,
+            manual_algorithm=self.manual_algorithm,
+            sequencing_strategy=self.sequencing_strategy,
+        )
+        driver["route_coords"] = route_coords
+        driver["route_progress"] = 0
+        driver["stops"] = stops
+        driver["total_route_distance"] = total_dist
+        driver["route_error"] = not bool(route_coords)
+        driver["status"] = (
+            "picking"
+            if any(order.get("status") in ("pending", "assigned") for order in remaining_orders)
+            else "delivering"
+        )
 
     def _move_drivers(self):
         """Advance drivers along their routes based on vehicle speed."""
@@ -220,7 +254,12 @@ class SimulationEngine:
                 progress = driver.get("route_progress", 0)
                 
                 if progress >= len(route) - 1:
-                    self._complete_delivery(driver)
+                    # A route can end at the rider's current node when the
+                    # destination snaps to that same road node. Process a stop
+                    # there before rebuilding the remaining route.
+                    self._process_reached_stops(driver, progress, progress)
+                    if not self._complete_delivery(driver):
+                        self._route_remaining_orders(driver)
                     continue
 
                 accumulated_dist = 0.0
@@ -260,33 +299,9 @@ class SimulationEngine:
                 driver["lng"] = new_pos[1]
                 driver["stats"]["total_distance_m"] += accumulated_dist
 
-                # Process stop milestones (restaurant pickups and customer deliveries)
-                for stop in driver.get("stops", []):
-                    stop_idx = stop.get("route_coord_idx", -1)
-                    coords = stop.get("coords")
-                    
-                    # Stop reached either by waypoint index or physical distance <= 75m
-                    dist_to_stop = 999999.0
-                    if coords:
-                        dx = (driver["lat"] - coords[0]) * 111000.0
-                        dy = (driver["lng"] - coords[1]) * 111000.0 * 0.95
-                        dist_to_stop = math.hypot(dx, dy)
-                    
-                    is_at_stop = (stop_idx >= 0 and new_progress >= stop_idx) or (dist_to_stop <= 75.0)
-                    
-                    if is_at_stop:
-                        oid = stop.get("order_id")
-                        if stop.get("type") == "pickup":
-                            for o in self.orders[:self.orders_released]:
-                                if (oid and o["order_id"] == oid) or (not oid and o["order_id"] in driver.get("current_orders", [])):
-                                    if o["status"] in ("pending", "assigned"):
-                                        o["status"] = "picked"
-                        elif stop.get("type") == "delivery":
-                            for o in self.orders[:self.orders_released]:
-                                if (oid and o["order_id"] == oid) or (not oid and o["order_id"] in driver.get("current_orders", [])):
-                                    if o["status"] != "delivered":
-                                        o["status"] = "delivered"
-                                        driver["stats"]["deliveries_completed"] += 1
+                # Process pickup and delivery milestones only after crossing
+                # their waypoint, or when physically within the stop radius.
+                self._process_reached_stops(driver, progress, new_progress)
 
                 # Update driver lifecycle status based on active orders
                 active_orders = [o for o in self.orders[:self.orders_released] if o["order_id"] in driver.get("current_orders", [])]
@@ -297,9 +312,36 @@ class SimulationEngine:
                     driver["status"] = "picking"
                 elif has_undelivered:
                     driver["status"] = "delivering"
-                elif active_orders or new_progress >= len(route) - 1:
-                    # All assigned orders are delivered or reached end of route!
+                    if new_progress >= len(route) - 1:
+                        self._route_remaining_orders(driver)
+                elif active_orders:
                     self._complete_delivery(driver)
+
+    def _process_reached_stops(self, driver, previous_progress, new_progress):
+        """Apply stops crossed on this route segment or reached physically."""
+        for stop in driver.get("stops", []):
+            stop_idx = stop.get("route_coord_idx", -1)
+            coords = stop.get("coords")
+            dist_to_stop = float("inf")
+            if coords:
+                dx = (driver["lat"] - coords[0]) * 111000.0
+                dy = (driver["lng"] - coords[1]) * 111000.0 * 0.95
+                dist_to_stop = math.hypot(dx, dy)
+
+            crossed_stop = stop_idx > previous_progress and new_progress >= stop_idx
+            if not crossed_stop and dist_to_stop > 75.0:
+                continue
+
+            order_id = stop.get("order_id")
+            for order in self.orders[:self.orders_released]:
+                matches = order_id == order["order_id"] if order_id else order["order_id"] in driver.get("current_orders", [])
+                if not matches:
+                    continue
+                if stop.get("type") == "pickup" and order.get("status") in ("pending", "assigned"):
+                    order["status"] = "picked"
+                elif stop.get("type") == "delivery" and order.get("status") != "delivered":
+                    order["status"] = "delivered"
+                    driver["stats"]["deliveries_completed"] += 1
 
     def trigger_road_closure(self, num_closures=3):
         """Simulates unexpected road closures and forces active drivers to re-route."""
@@ -351,6 +393,14 @@ class SimulationEngine:
             "is_priority": True
         }
         
+        existing_route_drivers = {
+            driver["driver_id"]
+            for driver in self.drivers
+            if driver["status"] in ("picking", "delivering")
+            and driver.get("current_orders")
+            and driver.get("route_coords")
+        }
+
         # Insert immediately into active released pool
         self.orders.insert(self.orders_released, new_order)
         self.orders_released += 1
@@ -361,16 +411,33 @@ class SimulationEngine:
         self._compute_routes()
         
         # Recalculate routes if any active driver was reassigned
-        self.recalculate_active_routes(reason=f"New Priority Order {order_id} arrived", traffic_level=1.2)
-        
-        if not self.last_reroute_event or self.last_reroute_event.get("reason") != f"New Priority Order {order_id} arrived":
-            self.last_reroute_event = {
-                "id": f"reroute-{int(time.time() * 1000)}",
-                "timestamp": time.time(),
-                "reason": f"New VIP Order {order_id} Arrived",
-                "message": f"📦 Dynamic Re-Route: New Priority Order {order_id} arrived! Evaluated sequence & dispatch.",
-                "drivers": []
-            }
+        recalculated_drivers = self.recalculate_active_routes(
+            reason=f"New VIP Order {order_id} arrived",
+            traffic_level=1.2
+        )
+        rerouted_drivers = [driver_id for driver_id in recalculated_drivers if driver_id in existing_route_drivers]
+        dispatched_drivers = [driver_id for driver_id in recalculated_drivers if driver_id not in existing_route_drivers]
+
+        status_parts = [f"📦 VIP ORDER {order_id} added."]
+        if rerouted_drivers:
+            status_parts.append(f"Recalculated {len(rerouted_drivers)} existing route(s): {', '.join(rerouted_drivers)}.")
+        if dispatched_drivers:
+            status_parts.append(f"Dispatched to {len(dispatched_drivers)} rider(s): {', '.join(dispatched_drivers)}.")
+        if not rerouted_drivers and not dispatched_drivers:
+            status_parts.append("Queued; no active routes needed rerouting.")
+
+        reroute_status = "rerouted" if rerouted_drivers else ("dispatched" if dispatched_drivers else "queued")
+
+        self.last_reroute_event = {
+            "id": f"reroute-{int(time.time() * 1000)}",
+            "timestamp": time.time(),
+            "reason": f"New VIP Order {order_id} arrived",
+            "message": " ".join(status_parts),
+            "status": reroute_status,
+            "drivers": recalculated_drivers,
+            "rerouted_drivers": rerouted_drivers,
+            "dispatched_drivers": dispatched_drivers,
+        }
         return new_order
 
     def recalculate_active_routes(self, reason="Road Obstruction", traffic_level=1.5, only_affected=False):
@@ -401,7 +468,10 @@ class SimulationEngine:
                 driver["current_node"] = current_node
                 
                 # Fetch pending orders for this driver
-                driver_orders = [o for o in self.orders[:self.orders_released] if o["order_id"] in driver["current_orders"]]
+                driver_orders = [
+                    o for o in self.orders[:self.orders_released]
+                    if o["order_id"] in driver["current_orders"] and o.get("status") != "delivered"
+                ]
                 if not driver_orders:
                     continue
                 
@@ -414,12 +484,21 @@ class SimulationEngine:
                 )
                 
                 # Apply new dynamically calculated route only if valid
-                if route_coords and len(route_coords) > 1:
+                if route_coords:
                     driver["route_coords"] = route_coords
                     driver["route_progress"] = 0
                     driver["stops"] = stops
                     driver["total_route_distance"] = total_dist
+                    driver["route_error"] = False
                     rerouted_drivers.append(driver["driver_id"])
+                else:
+                    # The old route may cross the closure that triggered this
+                    # reroute. Invalidate it so the active rider is retried
+                    # from its current position on the next simulation tick.
+                    driver["route_coords"] = []
+                    driver["route_progress"] = 0
+                    driver["stops"] = []
+                    driver["route_error"] = True
         
         if rerouted_drivers:
             self.last_reroute_event = {
@@ -429,19 +508,17 @@ class SimulationEngine:
                 "message": f"⚠️ Dynamic Re-Route ({reason}): Recalculated paths for {len(rerouted_drivers)} active rider(s) using dynamic A* navigation.",
                 "drivers": rerouted_drivers
             }
+        return rerouted_drivers
 
     def _complete_delivery(self, driver):
-        """Mark a driver's delivery as complete."""
-        # Mark orders as delivered
-        for order_id in driver.get("current_orders", []):
-            for order in self.orders[:self.orders_released]:
-                if order["order_id"] == order_id:
-                    if order["status"] != "delivered":
-                        order["status"] = "delivered"
-                        driver["stats"]["deliveries_completed"] += 1
-                        delivery_time = random.uniform(600, 2400)  # 10-40 minutes
-                        self._delivery_times.append(delivery_time)
-                    break
+        """Return a driver to idle only after all assigned orders are delivered."""
+        order_ids = set(driver.get("current_orders", []))
+        assigned_orders = [
+            order for order in self.orders[:self.orders_released]
+            if order["order_id"] in order_ids
+        ]
+        if any(order.get("status") != "delivered" for order in assigned_orders):
+            return False
 
         driver["status"] = "idle"
         driver["active_batch"] = None
@@ -449,6 +526,8 @@ class SimulationEngine:
         driver["route_coords"] = []
         driver["route_progress"] = 0
         driver["stops"] = []
+        driver["route_error"] = False
+        return True
 
     def _update_metrics(self):
         """Compute current simulation metrics."""
@@ -529,11 +608,36 @@ class SimulationEngine:
                             "order_id": o["order_id"],
                             "restaurant_name": o.get("restaurant_name", "Cafe Goodluck"),
                             "restaurant_zone": o.get("restaurant_zone", "Pune Core"),
+                            "restaurant_lat": o["restaurant_lat"],
+                            "restaurant_lng": o["restaurant_lng"],
+                            "customer_lat": o["customer_lat"],
+                            "customer_lng": o["customer_lng"],
                             "status": o["status"],
                             "is_priority": o.get("is_priority", False),
                             "items": o.get("items", ["Chicken Biryani", "Butter Naan", "Lassi"])
                         })
                         break
+
+            # Filter remaining active delivery stops for this driver (only non-delivered)
+            # Once rider reaches this point and finishes delivery, it immediately disappears
+            remaining_delivery_stops = []
+            for s in d.get("stops", []):
+                if s.get("type") == "delivery":
+                    oid = s.get("order_id")
+                    is_delivered = False
+                    if oid:
+                        for o in self.orders[:self.orders_released]:
+                            if o["order_id"] == oid and o.get("status") == "delivered":
+                                is_delivered = True
+                                break
+                    if not is_delivered:
+                        c = s.get("coords")
+                        if c:
+                            remaining_delivery_stops.append({
+                                "order_id": oid,
+                                "lat": c[0],
+                                "lng": c[1],
+                            })
 
             driver_positions.append({
                 "driver_id": d["driver_id"],
@@ -542,6 +646,7 @@ class SimulationEngine:
                 "lng": d["lng"],
                 "status": d["status"],
                 "route_coords": forward_coords,
+                "route_error": d.get("route_error", False),
                 "progress": d["route_progress"],
                 "active_batch": d["active_batch"],
                 "deliveries": d["stats"]["deliveries_completed"],
@@ -549,6 +654,7 @@ class SimulationEngine:
                 "speed_kmh": 38.0 if d["status"] != "idle" else 0.0,
                 "battery_pct": max(15, 100 - (d["stats"]["deliveries_completed"] * 6)),
                 "current_orders": active_orders_payload,
+                "delivery_stops": remaining_delivery_stops,
             })
 
         # Get visible orders (restaurants & customers)
@@ -562,6 +668,7 @@ class SimulationEngine:
                     "customer_lat": o["customer_lat"],
                     "customer_lng": o["customer_lng"],
                     "status": o["status"],
+                    "is_priority": o.get("is_priority", False),
                 })
 
         return {

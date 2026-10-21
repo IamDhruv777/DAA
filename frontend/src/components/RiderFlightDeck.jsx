@@ -1,7 +1,7 @@
 import React from 'react';
 import './RiderFlightDeck.css';
 
-function RiderFlightDeck({ driver, isFollowing, onToggleFollow, onClose }) {
+function RiderFlightDeck({ driver, driverColor, isFollowing, onToggleFollow, onClose }) {
   if (!driver) return null;
 
   const statusColors = {
@@ -18,8 +18,12 @@ function RiderFlightDeck({ driver, isFollowing, onToggleFollow, onClose }) {
     returning: '🔄 Depot Return'
   };
 
-  const color = statusColors[driver.status] || '#94a3b8';
-  const order = driver.current_orders && driver.current_orders.length > 0 ? driver.current_orders[0] : null;
+  const color = driverColor || statusColors[driver.status] || '#94a3b8';
+  const activeOrders = (driver.current_orders || []).filter(item => item.status !== 'delivered');
+  const order = activeOrders[0] || null;
+  const destination = order && Number.isFinite(Number(order.customer_lat)) && Number.isFinite(Number(order.customer_lng))
+    ? `${Number(order.customer_lat).toFixed(5)}, ${Number(order.customer_lng).toFixed(5)}`
+    : null;
 
   return (
     <aside className="rider-flight-deck">
@@ -44,6 +48,12 @@ function RiderFlightDeck({ driver, isFollowing, onToggleFollow, onClose }) {
           {statusLabels[driver.status] || driver.status.toUpperCase()}
         </span>
       </div>
+
+      {driver.route_error && (
+        <div className="route-error-notice" role="status">
+          ⚠️ No road path found. The rider is keeping the delivery and will retry routing.
+        </div>
+      )}
 
       {/* Telemetry Gauge Grid */}
       <div className="telemetry-grid">
@@ -89,6 +99,16 @@ function RiderFlightDeck({ driver, isFollowing, onToggleFollow, onClose }) {
               <span className="detail-icon">🍲</span>
               <div>
                 <span className="detail-items">{(order.items || ['Biryani', 'Roti']).join(', ')}</span>
+              </div>
+            </div>
+            <div className="order-detail-row destination-row">
+              <span className="detail-icon">📍</span>
+              <div>
+                <strong>{order.status === 'picked' ? 'Delivering to customer' : 'Customer drop-off after pickup'}</strong>
+                <span className="detail-sub">Drop-off · {destination || 'Destination unavailable'}</span>
+                {activeOrders.length > 1 && (
+                  <span className="detail-sub">{activeOrders.length - 1} more active {activeOrders.length === 2 ? 'delivery' : 'deliveries'}</span>
+                )}
               </div>
             </div>
           </div>

@@ -55,7 +55,7 @@ class GreedySequencing(SequencingAlgorithm):
         visited = [False] * n
         route = [start_idx]
         visited[start_idx] = True
-        
+
         pending_deliveries = set()
         remaining_pickups = set(pickup_delivery_map.keys())
         
@@ -72,7 +72,7 @@ class GreedySequencing(SequencingAlgorithm):
             curr = route[-1]
             best_next = -1
             best_dist = float('inf')
-            
+
             valid_stops = remaining_pickups.union(pending_deliveries)
             
             for next_stop in valid_stops:
@@ -124,6 +124,7 @@ def optimize_driver_route(G, driver, orders_list, routing_mode="dynamic", manual
 
     all_nodes = [driver_node]
     pickup_delivery_map = {}
+    stop_info = {}
     
     for i, order in enumerate(orders_list):
         p_node = order["restaurant_node"]
@@ -134,11 +135,14 @@ def optimize_driver_route(G, driver, orders_list, routing_mode="dynamic", manual
         if order.get("status") in ("picked", "delivering"):
             d_idx = len(all_nodes)
             all_nodes.append(d_node)
+            stop_info[d_idx] = {"type": "delivery", "order_id": order.get("order_id")}
         else:
             p_idx = len(all_nodes)
             all_nodes.append(p_node)
+            stop_info[p_idx] = {"type": "pickup", "order_id": order.get("order_id")}
             d_idx = len(all_nodes)
             all_nodes.append(d_node)
+            stop_info[d_idx] = {"type": "delivery", "order_id": order.get("order_id")}
             pickup_delivery_map[p_idx] = d_idx
 
     if len(all_nodes) <= 1:
@@ -148,41 +152,44 @@ def optimize_driver_route(G, driver, orders_list, routing_mode="dynamic", manual
 
     stop_order = sequencing_strategy.sequence_stops(dist_matrix, pickup_delivery_map, start_idx=0)
 
-    full_route_coords = []
+    # Include the starting point so zero-length legs (already at a stop) still
+    # produce a valid route that the simulation can process.
+    full_route_coords = [get_node_coords(G, driver_node)]
     total_dist_m = 0
     all_stops = []
     
-    ordered_nodes = [all_nodes[i] for i in stop_order]
-    
-    for i in range(len(ordered_nodes) - 1):
-        u, v = ordered_nodes[i], ordered_nodes[i+1]
+    for previous_idx, stop_idx in zip(stop_order, stop_order[1:]):
+        u, v = all_nodes[previous_idx], all_nodes[stop_idx]
         
-        result = find_route(G, u, v, algorithm=manual_algorithm, dynamic_mode=(routing_mode=="dynamic"), traffic_level=traffic_level)
-        
-        if "error" not in result:
+        if u != v:
+            result = find_route(G, u, v, algorithm=manual_algorithm, dynamic_mode=(routing_mode=="dynamic"), traffic_level=traffic_level)
+
+            if "error" in result or not result.get("path_coords"):
+                # A configured/manual strategy may fail on a valid graph path.
+                # Retry with weighted Dijkstra before treating the route as
+                # unreachable.
+                result = find_route(G, u, v, algorithm="dijkstra", dynamic_mode=False)
+
+            if "error" in result or not result.get("path_coords"):
+                # Never silently omit a leg: that would shift stop indices and
+                # can make a rider skip a pickup or delivery.
+                return [], [], 0
+
             path = result["path_coords"]
             if full_route_coords and path:
                 path = path[1:]
             full_route_coords.extend(path)
             total_dist_m += result["total_distance_m"]
         
-        # Identify which order this stop belongs to
-        matching_order = None
-        node_type = "delivery"
-        for o in orders_list:
-            if v == o.get("restaurant_node") and o.get("status") not in ("picked", "delivering"):
-                node_type = "pickup"
-                matching_order = o.get("order_id")
-                break
-            elif v == o.get("customer_node"):
-                node_type = "delivery"
-                matching_order = o.get("order_id")
-                break
+        # Use the stop's route index rather than matching by node ID. Several
+        # orders can share a restaurant/customer node, and node-only matching
+        # can otherwise attach both stops to the same order.
+        stop = stop_info[stop_idx]
 
         all_stops.append({
-            "type": node_type,
+            "type": stop["type"],
             "node": v,
-            "order_id": matching_order,
+            "order_id": stop["order_id"],
             "coords": get_node_coords(G, v),
             "route_coord_idx": max(0, len(full_route_coords) - 1)
         })

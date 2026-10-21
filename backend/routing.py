@@ -4,6 +4,7 @@ Implements Dijkstra, A*, Bellman-Ford, and Floyd-Warshall on the road network.
 """
 import math
 import heapq
+from collections.abc import Mapping
 import networkx as nx
 from road_network import get_node_coords
 from collections import deque
@@ -19,35 +20,110 @@ def haversine(lat1, lng1, lat2, lng2):
     return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
+def _get_edge_attributes(G, u, v):
+    """Safely extract the best edge attribute dict between u and v."""
+    try:
+        if hasattr(G, 'is_multigraph') and G.is_multigraph():
+            edges = G[u][v]
+            if not edges:
+                return {}
+            # Pick edge with the minimum travel_time (or base_travel_time)
+            return min(
+                edges.values(),
+                key=lambda d: float(d.get("travel_time", d.get("base_travel_time", 12.0)))
+            )
+        elif isinstance(G[u][v], Mapping):
+            return G[u][v]
+        return {}
+    except Exception:
+        return {}
+
+
 def _path_stats(G, path):
-    """Calculate total distance and travel time for a path."""
-    total_distance = 0
-    total_time = 0
+    """Calculate total distance and travel time for a path using real edge data."""
+    total_distance = 0.0
+    total_time = 0.0
     for i in range(len(path) - 1):
         u, v = path[i], path[i + 1]
-        # Handle both MultiDiGraph and DiGraph
-        edge_data = {}
-        try:
-            if hasattr(G, 'adj') and u in G.adj and v in G.adj[u]:
-                # MultiDiGraph: G[u][v] returns {key: data_dict, ...}
-                edges = G[u][v]
-                if isinstance(edges, dict):
-                    # Pick shortest edge if multiple parallel edges
-                    first_key = next(iter(edges))
-                    if isinstance(edges[first_key], dict):
-                        edge_data = edges[first_key]
-                    else:
-                        edge_data = edges
-        except (KeyError, StopIteration):
-            edge_data = {}
-        total_distance += float(edge_data.get("distance", edge_data.get("length", 100)))
-        total_time += float(edge_data.get("travel_time", edge_data.get("base_travel_time", 12)))
+        edge_data = _get_edge_attributes(G, u, v)
+        length = float(edge_data.get("length", edge_data.get("distance", 100.0)))
+        t_time = float(edge_data.get("travel_time", edge_data.get("base_travel_time", max(1.0, length / 8.33))))
+        total_distance += length
+        total_time += t_time
     return total_distance, total_time
 
 
 def _path_to_coords(G, path):
-    """Convert a node path to lat/lng coordinates."""
-    return [get_node_coords(G, node) for node in path]
+    """Convert a node path to lat/lng coordinates following real road geometry if available."""
+    if not path:
+        return []
+    coords = []
+    for i in range(len(path) - 1):
+        u, v = path[i], path[i + 1]
+        edge_data = _get_edge_attributes(G, u, v)
+        geom = edge_data.get("geometry")
+        seg_pts = []
+        if geom is not None and hasattr(geom, "coords"):
+            seg_pts = [[float(lat), float(lng)] for lng, lat, *_ in geom.coords]
+        elif isinstance(geom, str) and "(" in geom and ")" in geom:
+            # NetworkX reads GraphML geometry as WKT text; decode its OSM
+            # intermediate points so rendered paths follow curved streets.
+            coordinate_text = geom.partition("(")[2].rpartition(")")[0]
+            try:
+                for point in coordinate_text.split(","):
+                    values = point.strip().split()
+                    if len(values) >= 2:
+                        seg_pts.append([float(values[1]), float(values[0])])
+            except ValueError:
+                seg_pts = []
+
+        if len(seg_pts) >= 2:
+            start = get_node_coords(G, u)
+            start_error = sum((seg_pts[0][j] - start[j]) ** 2 for j in (0, 1))
+            end_error = sum((seg_pts[-1][j] - start[j]) ** 2 for j in (0, 1))
+            if end_error < start_error:
+                seg_pts.reverse()
+            if coords and seg_pts:
+                # Avoid duplicating the junction point
+                seg_pts = seg_pts[1:]
+            coords.extend(seg_pts)
+        else:
+            u_c = get_node_coords(G, u)
+            v_c = get_node_coords(G, v)
+            if not coords:
+                coords.append(u_c)
+            coords.append(v_c)
+    if not coords and path:
+        coords = [get_node_coords(G, node) for node in path]
+    return coords
+
+
+def remove_redundant_loops(path_nodes, stop_nodes_set=None):
+    """
+    Remove pointless loops in a route (where path visits node A, wanders, and returns to node A),
+    as long as no required delivery/pickup stop is inside the loop.
+    """
+    if not path_nodes or len(path_nodes) < 4:
+        return path_nodes
+    if stop_nodes_set is None:
+        stop_nodes_set = set()
+
+    cleaned = []
+    node_to_idx = {}
+    for node in path_nodes:
+        if node in node_to_idx and node not in stop_nodes_set:
+            prev_idx = node_to_idx[node]
+            loop_nodes = cleaned[prev_idx + 1:]
+            if not any(n in stop_nodes_set for n in loop_nodes):
+                # Safe to prune the redundant diversion loop!
+                for n in loop_nodes:
+                    if n in node_to_idx and node_to_idx[n] > prev_idx:
+                        del node_to_idx[n]
+                cleaned = cleaned[:prev_idx + 1]
+                continue
+        node_to_idx[node] = len(cleaned)
+        cleaned.append(node)
+    return cleaned
 
 
 import time
@@ -62,9 +138,11 @@ def custom_astar_dijkstra(G, source, target, is_astar=False):
     def heuristic(u):
         if not is_astar: return 0
         u_coords = get_node_coords(G, u)
-        # return estimated travel time in seconds (assume 30km/h = 8.33 m/s)
+        # return estimated travel time in seconds:
+        # Haversine distance divided by max speed (assume max 72 km/h = 20.0 m/s)
+        # Strictly admissible heuristic guarantees A* finds true shortest path without sub-optimal diversions.
         dist = haversine(u_coords[0], u_coords[1], target_coords[0], target_coords[1])
-        return dist / 8.33
+        return dist / 20.0
 
     # Priority queue: (f_score, c_id, current_node, current_g_score)
     import itertools
@@ -94,23 +172,25 @@ def custom_astar_dijkstra(G, source, target, is_astar=False):
             path.reverse()
             return path, explored_list
             
-        # Instead of iterating over all neighbors slowly, use G.adj
-        if isinstance(G, nx.MultiDiGraph) or hasattr(G, 'adj'):
-            neighbors = G.adj.get(current, {})
-        else:
-            neighbors = G[current]
+        # Get neighbors
+        neighbors = G.adj.get(current, {}) if hasattr(G, 'adj') else G[current]
             
         for neighbor, edge_data in neighbors.items():
-            if isinstance(edge_data, dict) and len(edge_data) > 0 and 0 in edge_data:
-                # MultiDiGraph, pick first key
-                data = edge_data[list(edge_data.keys())[0]]
-                if isinstance(data, dict):
-                    weight = data.get("travel_time", data.get("base_travel_time", 12))
-                else: weight = 12
+            if hasattr(G, 'is_multigraph') and G.is_multigraph():
+                if not edge_data:
+                    continue
+                # Pick edge with the lowest travel_time
+                best_edge = min(
+                    edge_data.values(),
+                    key=lambda d: float(d.get("travel_time", d.get("base_travel_time", 12.0)))
+                )
+                weight = float(best_edge.get("travel_time", best_edge.get("base_travel_time", 12.0)))
+            elif isinstance(edge_data, Mapping):
+                weight = float(edge_data.get("travel_time", edge_data.get("base_travel_time", 12.0)))
             else:
-                weight = edge_data.get("travel_time", edge_data.get("base_travel_time", 12))
+                weight = 12.0
                 
-            tentative_g = current_g + float(weight)
+            tentative_g = current_g + weight
             
             if neighbor not in g_score or tentative_g < g_score[neighbor]:
                 came_from[neighbor] = current
@@ -408,20 +488,17 @@ def find_route(G, source_node, target_node, algorithm="dijkstra", dynamic_mode=F
         
         # Intelligent algorithm selection based on conditions
         if is_urgent:
-            # When urgent, A* is faster to compute, providing quick response
+            # When urgent, A* is faster to compute, providing rapid optimal response
             algorithm = "astar"
-        elif dist_m > 5000:
-            # Long distance, A* scales better
+        elif dist_m > 3000:
+            # Long distance, A* scales much faster with admissible heuristic
             algorithm = "astar"
-        elif traffic_level > 1.5:
-            # High traffic variability, Dijkstra is more thorough
+        elif traffic_level > 1.4:
+            # High traffic variability, Dijkstra guarantees exact shortest path
             algorithm = "dijkstra"
-        elif dist_m < 1000:
-            # Short distance, BFS can be very fast if weights don't matter as much, but Dijkstra is safer for times.
-            # Using Greedy for very short unconstrained paths just to demonstrate mode selection
-            algorithm = "greedy"
         else:
-            algorithm = "dijkstra"
+            # For short and medium distances, A* gives clean direct paths without detours
+            algorithm = "astar"
 
     algorithms = {
         "dijkstra": dijkstra,
@@ -435,6 +512,18 @@ def find_route(G, source_node, target_node, algorithm="dijkstra", dynamic_mode=F
     func = algorithms.get(algorithm, dijkstra)
     result = func(G, source_node, target_node)
     
+    if isinstance(result, dict) and "path_nodes" in result:
+        # Prune any redundant loops where the route wanders and returns without reason
+        orig_nodes = result["path_nodes"]
+        pruned_nodes = remove_redundant_loops(orig_nodes, {source_node, target_node})
+        if len(pruned_nodes) < len(orig_nodes):
+            dist, travel_time = _path_stats(G, pruned_nodes)
+            result["path_nodes"] = pruned_nodes
+            result["path_coords"] = _path_to_coords(G, pruned_nodes)
+            result["total_distance_m"] = round(dist, 2)
+            result["estimated_time_s"] = round(travel_time, 2)
+            result["num_nodes"] = len(pruned_nodes)
+
     # Inject chosen algorithm name into result to reflect dynamic choice
     if isinstance(result, dict) and dynamic_mode:
         result["dynamic_choice"] = algorithm
