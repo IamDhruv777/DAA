@@ -1,14 +1,15 @@
-function SimControls({ 
-  isRunning, 
-  isInitializing, 
-  onStart, 
-  onStop, 
-  onReset, 
-  config, 
+function SimControls({
+  isRunning,
+  isInitializing,
+  onStart,
+  onStop,
+  onReset,
+  config,
   onConfigChange,
   onTriggerRoadClosure,
   onTriggerTrafficSurge,
-  onInjectOrder
+  onInjectOrder,
+  isInjectingOrder = false
 }) {
   return (
     <div className="glass-panel">
@@ -33,29 +34,30 @@ function SimControls({
             ⚡ Dynamic Re-routing Triggers:
           </span>
           <div style={{ display: 'flex', gap: '6px' }}>
-            <button 
-              className="btn btn-secondary" 
+            <button
+              className="btn btn-secondary"
               style={{ flex: 1, fontSize: '11px', padding: '6px 4px', background: 'rgba(255, 69, 58, 0.15)', borderColor: '#ff453a', color: '#ff453a' }}
               onClick={onTriggerRoadClosure}
               title="Close roads and force active drivers to re-route via A*"
             >
               💥 Roadblock
             </button>
-            <button 
-              className="btn btn-secondary" 
+            <button
+              className="btn btn-secondary"
               style={{ flex: 1, fontSize: '11px', padding: '6px 4px', background: 'rgba(255, 159, 10, 0.15)', borderColor: '#ff9f0a', color: '#ff9f0a' }}
               onClick={onTriggerTrafficSurge}
               title="Spike traffic to trigger congestion-aware re-routing"
             >
               🚦 Traffic Spike
             </button>
-            <button 
-              className="btn btn-secondary" 
+            <button
+              className="btn btn-secondary"
               style={{ flex: 1, fontSize: '11px', padding: '6px 4px', background: 'rgba(0, 122, 255, 0.15)', borderColor: '#0a84ff', color: '#0a84ff' }}
               onClick={onInjectOrder}
+              disabled={isInjectingOrder}
               title="Inject a new VIP order and recalculate stop sequence"
             >
-              📦 VIP Order
+              {isInjectingOrder ? '📦 Adding VIP...' : '📦 VIP Order'}
             </button>
           </div>
         </div>
@@ -78,10 +80,10 @@ function SimControls({
         <input
           className="glass-input"
           type="number"
-          min="10"
-          max="5000"
+          min="5"
+          max="100"
           value={config.num_orders}
-          onChange={(e) => onConfigChange({...config, num_orders: parseInt(e.target.value) || 10})}
+          onChange={(e) => onConfigChange({...config, num_orders: Math.min(100, Math.max(5, parseInt(e.target.value) || 5))})}
         />
       </div>
 
@@ -100,7 +102,7 @@ function SimControls({
           style={{ width: '100%', accentColor: '#0a84ff' }}
         />
       </div>
-      
+
       <div className="info-text">
         {isRunning ? "Adjusting speed updates in real-time." : "Adjust parameters before starting a new simulation run."}
       </div>
@@ -108,4 +110,4 @@ function SimControls({
   );
 }
 
-export default SimControls;
+export default SimControls;

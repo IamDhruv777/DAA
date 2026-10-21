@@ -40,7 +40,7 @@ class DualSimulationEngine:
         self.optimized.routing_mode = "dynamic"
         self.optimized.manual_algorithm = "astar"
 
-    def initialize(self, num_orders=15, num_drivers=5, city_name="Pune, India", tick_delay=0.8):
+    def initialize(self, num_orders=5, num_drivers=5, city_name="Pune, India", tick_delay=0.8):
         """Initializes both engines with IDENTICAL initial state."""
         print(f"[DUAL-SIM] Initializing A/B Benchmark for {city_name} with {num_drivers} drivers and {num_orders} orders...")
         self.tick_delay = tick_delay
